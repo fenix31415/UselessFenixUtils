@@ -153,7 +153,8 @@ namespace FenixUtils
 	/// random less than prop
 	/// </summary>
 	bool random(float prop);
-	void damageav(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
+	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
+	void damageav(RE::Actor* a, RE::ActorValue av, float val);
 	RE::TESObjectWEAP* get_UnarmedWeap();
 	float PlayerCharacter__get_reach(RE::Actor* a);
 	float GetHeadingAngle(RE::TESObjectREFR* a, const RE::NiPoint3& a_pos, bool a_abs);
@@ -193,7 +194,7 @@ namespace FenixUtils
 	};
 
 	template <size_t BRANCH_TYPE, uint64_t ID, size_t offset = 0, bool call = false>
-	void add_trampoline(Xbyak::CodeGenerator* xbyakCode)
+	auto add_trampoline(Xbyak::CodeGenerator* xbyakCode)
 	{
 		constexpr REL::ID funcOffset = REL::ID(ID);
 		auto funcAddr = funcOffset.address();
@@ -202,9 +203,9 @@ namespace FenixUtils
 		auto result = trampoline.allocate(size);
 		std::memcpy(result, xbyakCode->getCode(), size);
 		if constexpr (!call)
-			trampoline.write_branch<BRANCH_TYPE>(funcAddr + offset, (std::uintptr_t)result);
+			return trampoline.write_branch<BRANCH_TYPE>(funcAddr + offset, (std::uintptr_t)result);
 		else
-			trampoline.write_call<BRANCH_TYPE>(funcAddr + offset, (std::uintptr_t)result);
+			return trampoline.write_call<BRANCH_TYPE>(funcAddr + offset, (std::uintptr_t)result);
 	}
 
 	template<float min, float max>
@@ -218,8 +219,29 @@ namespace FenixUtils
 	bool PlayIdle(RE::AIProcess* proc, RE::Actor* attacker, RE::DEFAULT_OBJECT smth, RE::TESIdleForm* idle, bool a5, bool a6, RE::Actor* target);
 	float get_total_av(RE::Actor* a, RE::ActorValue av);
 	bool TESObjectREFR__HasEffectKeyword(RE::TESObjectREFR* a, RE::BGSKeyword* kwd);
+	uint32_t get_item_count(RE::Actor* a, RE::TESBoundObject* item, void* vm, uint32_t stack);
 
 	// ignore cells
 	float get_dist2(RE::Actor* a, RE::Actor* b);
+	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation);
+	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation);
+
+	template <int ID, int offset = 0x0>
+	void writebytes(const std::string_view& data)
+	{
+		REL::safe_write(REL::ID(ID).address() + offset, data.data(), data.size());
+	}
+
+	RE::BGSAttackDataPtr get_attackData(RE::Actor* a);
+	bool is_powerattacking(RE::Actor* a);
+	RE::TESObjectWEAP* get_weapon(RE::Actor* a);
+	bool is_human(RE::Actor* a);
+	void set_RegenDelay(RE::AIProcess* proc, RE::ActorValue av, float time);
+	void FlashHudMenuMeter__blink(RE::ActorValue av);
+	float get_regen(RE::Actor* a, RE::ActorValue av);
+	void damagestamina_delay_blink(RE::Actor* a, float cost);
+	float getAV_pers(RE::Actor* a, RE::ActorValue av);
+	float lerp(float x, float Ax, float Ay, float Bx, float By);
 }
 using FenixUtils::_generic_foo_;
+using FenixUtils::add_trampoline;

@@ -597,9 +597,14 @@ namespace FenixUtils
 		return _generic_foo_<26009, decltype(random)>::eval(prop);
 	}
 
-	void damageav(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker)
+	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker)
 	{
-		return _generic_foo_<37523, decltype(damageav)>::eval(victim, i1, i2, val, attacker);
+		return _generic_foo_<37523, decltype(damageav_attacker)>::eval(victim, i1, i2, val, attacker);
+	}
+
+	void damageav(RE::Actor* a, RE::ActorValue av, float val)
+	{
+		a->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, av, -val);
 	}
 
 	RE::TESObjectWEAP* get_UnarmedWeap()
@@ -707,5 +712,127 @@ namespace FenixUtils
 	bool TESObjectREFR__HasEffectKeyword(RE::TESObjectREFR* a, RE::BGSKeyword* kwd)
 	{
 		return _generic_foo_<19220, decltype(TESObjectREFR__HasEffectKeyword)>::eval(a, kwd);
+	}
+
+	uint32_t get_item_count(RE::Actor* a, RE::TESBoundObject* item, void* vm, uint32_t stack)
+	{
+		return _generic_foo_<56062, decltype(get_item_count)>::eval(a, item, vm, stack);
+	}
+
+	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation)
+	{
+		RE::NiPoint3 ans;
+
+		float gamma = -rotation.z + 3.1415926f / 2, beta = rotation.x;
+		float cos_g = cos(gamma);
+		float sin_g = sin(gamma);
+		float cos_b = cos(beta);
+		float sin_b = sin(beta);
+
+		ans.x = r * cos_g * cos_b;
+		ans.y = r * sin_g * cos_b;
+		ans.z = r * -sin_b;
+
+		return ans;
+	}
+
+	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation)
+	{
+		RE::NiPoint3 ans;
+
+		float gamma = -rotation.z + 3.1415926f / 2;
+		float cos_g = cos(gamma);
+		float sin_g = sin(gamma);
+
+		ans.x = r * cos_g;
+		ans.y = r * sin_g;
+		ans.z = 0.0f;
+
+		return ans;
+	}
+
+	RE::BGSAttackDataPtr get_attackData(RE::Actor* a)
+	{
+		if (auto proc = a->currentProcess) {
+			if (auto high = proc->high) {
+				return high->attackData;
+			}
+		}
+		return nullptr;
+	}
+
+	bool is_powerattacking(RE::Actor* a)
+	{
+		return _generic_foo_<37639, decltype(is_powerattacking)>::eval(a);
+	}
+
+	RE::TESObjectWEAP* get_weapon(RE::Actor* a)
+	{
+		if (auto __weap = a->GetAttackingWeapon()) {
+			if (auto _weap = __weap->object; _weap->IsWeapon()) {
+				return _weap->As<RE::TESObjectWEAP>();
+			}
+		}
+
+		return nullptr;
+	}
+
+	bool is_human(RE::Actor* a)
+	{
+		auto race = a->GetRace();
+		if (!race)
+			return false;
+
+		auto flag = race->validEquipTypes.underlying();
+		auto mask = static_cast<uint32_t>(RE::TESRace::EquipmentFlag::kOneHandSword) |
+		            static_cast<uint32_t>(RE::TESRace::EquipmentFlag::kTwoHandSword);
+		return (flag & mask) > 0;
+	}
+
+	void set_RegenDelay(RE::AIProcess* proc, RE::ActorValue av, float time)
+	{
+		return _generic_foo_<38526, decltype(set_RegenDelay)>::eval(proc, av, time);
+	}
+
+	void FlashHudMenuMeter__blink(RE::ActorValue av) { _generic_foo_<51907, decltype(FlashHudMenuMeter__blink)>::eval(av); }
+
+	float get_regen(RE::Actor* a, RE::ActorValue av)
+	{
+		return _generic_foo_<37515, decltype(get_regen)>::eval(a, av);
+	}
+
+	void damagestamina_delay_blink(RE::Actor* a, float cost) {
+		float old_stamina = a->GetActorValue(RE::ActorValue::kStamina);
+		damageav(a, RE::ActorValue::kStamina, cost);
+		if (a->GetActorValue(RE::ActorValue::kStamina) <= 0.0f) {
+			if (auto proc = a->currentProcess) {
+				float StaminaRegenDelay = (cost - old_stamina) / get_regen(a, RE::ActorValue::kStamina);
+				set_RegenDelay(proc, RE::ActorValue::kStamina, StaminaRegenDelay);
+				if (a->IsPlayerRef()) {
+					FlashHudMenuMeter__blink(RE::ActorValue::kStamina);
+				}
+			}
+		}
+	}
+
+	float getAV_pers(RE::Actor* a, RE::ActorValue av)
+	{
+		float all = get_total_av(a, av);
+		if (all < 0.000001)
+			return 1.0f;
+
+		float cur = a->GetActorValue(av);
+		if (cur < 0.0f)
+			return 0.0f;
+
+		return cur / all;
+	}
+
+	float lerp(float x, float Ax, float Ay, float Bx, float By)
+	{
+		if (abs(Bx - Ax) < 0.0000001)
+			return Ay;
+
+		return (Ay * (Bx - x) + By * (x - Ax)) / (Bx - Ax);
 	}
 }
