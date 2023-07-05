@@ -249,6 +249,7 @@ namespace DebugAPI_IMPL
 		return glm::vec3(niPos.x, niPos.y, niPos.z);
 	}
 
+	std::mutex DebugAPI::LinesToDraw_mutex;
 	std::vector<DebugAPILine*> DebugAPI::LinesToDraw;
 
 	bool DebugAPI::CachedMenuData;
@@ -279,6 +280,7 @@ namespace DebugAPI_IMPL
 		}
 
 		DebugAPILine* newLine = new DebugAPILine(from, to, color, lineThickness, GetTickCount64() + liftetimeMS);
+		std::lock_guard<std::mutex> lg(LinesToDraw_mutex);
 		LinesToDraw.push_back(newLine);
 	}
 
@@ -291,6 +293,7 @@ namespace DebugAPI_IMPL
 		CacheMenuData();
 		ClearLines2D(hud->uiMovie);
 
+		std::lock_guard<std::mutex> lg(LinesToDraw_mutex);
 		for (int i = 0; i < LinesToDraw.size(); i++) {
 			DebugAPILine* line = LinesToDraw[i];
 
@@ -332,6 +335,7 @@ namespace DebugAPI_IMPL
 
 	DebugAPILine* DebugAPI::GetExistingLine(const glm::vec3& from, const glm::vec3& to, const glm::vec4& color, float lineThickness)
 	{
+		std::lock_guard<std::mutex> lg(LinesToDraw_mutex);
 		for (int i = 0; i < LinesToDraw.size(); i++) {
 			DebugAPILine* line = LinesToDraw[i];
 
@@ -587,14 +591,89 @@ namespace Impl
 	{
 		return _generic_foo_<37524, decltype(Actor__GetActorValueModifier)>::eval(a, mod, av);
 	}
+
+	uint32_t* placeatme(RE::TESDataHandler* datahandler, uint32_t* handle, RE::TESBoundObject* form, RE::NiPoint3* pos, RE::NiPoint3* angle, RE::TESObjectCELL* cell, RE::TESWorldSpace* wrld, RE::TESObjectREFR* a8, char a9, void* a10, char persist, char a12)
+	{
+		return _generic_foo_<13625, decltype(placeatme)>::eval(datahandler, handle, form, pos, angle, cell, wrld, a8, a9, a10, persist, a12);
+	}
+
+	RE::TESObjectREFR* PlaceAtMe(void* vm, int stack, RE::TESObjectREFR* refr, RE::TESBoundObject* form, uint32_t count,
+		char persist, char disabled)
+	{
+		return _generic_foo_<55672, decltype(PlaceAtMe)>::eval(vm, stack, refr, form, count, persist, disabled);
+	}
 }
 using namespace Impl;
 
 namespace FenixUtils
 {
-	bool random(float prop)
+	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a) { return _generic_foo_<37624, decltype(GetEquippedShield)>::eval(a); }
+
+	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem)
 	{
-		return _generic_foo_<26009, decltype(random)>::eval(prop);
+		return _generic_foo_<11194, decltype(getAVEffectSetting)>::eval(mgitem);
+	}
+
+	void rotate(RE::NiPoint3& A, const RE::NiPoint3& rot)
+	{
+		RE::NiMatrix3 m;
+		m.EulerAnglesToAxesZXY(rot);
+		A = m * A;
+	}
+
+	void rotateSkyrim(RE::NiPoint3& A, RE::NiPoint3 rot)
+	{
+		rot.z = -rot.z + 3.1415926f * 0.5f;
+		RE::NiMatrix3 m;
+		m.EulerAnglesToAxesZXY(rot);
+		A = m * A;
+	}
+
+	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation)
+	{
+		RE::NiPoint3 ans;
+
+		float gamma = -rotation.z + 3.1415926f / 2, beta = rotation.x;
+		float cos_g = cos(gamma);
+		float sin_g = sin(gamma);
+		float cos_b = cos(beta);
+		float sin_b = sin(beta);
+
+		ans.x = r * cos_g * cos_b;
+		ans.y = r * sin_g * cos_b;
+		ans.z = r * -sin_b;
+
+		return ans;
+	}
+
+	RE::NiPoint3 rotateZ(float r, float rot_z)
+	{
+		RE::NiPoint3 ans;
+
+		float gamma = -rot_z + 3.1415926f / 2;
+		float cos_g = cos(gamma);
+		float sin_g = sin(gamma);
+
+		ans.x = r * cos_g;
+		ans.y = r * sin_g;
+		ans.z = 0.0f;
+
+		return ans;
+	}
+
+	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation) { return rotateZ(r, rotation.z); }
+
+	bool random(float prop) { return _generic_foo_<26009, decltype(random)>::eval(prop); }
+
+	float random_range(float min, float max) { return _generic_foo_<14109, float(float min, float max)>::eval(min, max); }
+
+	int random_range(int min, int max)
+	{
+		std::random_device rd;
+		std::mt19937 gen(rd());
+		std::uniform_int_distribution<> distr(min, max);
+
+		return distr(gen);
 	}
 
 	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker)
@@ -659,7 +738,7 @@ namespace FenixUtils
 		}
 	}
 
-	RE::NiPoint3* Actor__get_eye_pos(RE::Actor* me, RE::NiPoint3* ans, int mb_type)
+	RE::NiPoint3* Actor__get_eye_pos(RE::Actor* me, RE::NiPoint3& ans, int mb_type)
 	{
 		return _generic_foo_<36755, decltype(Actor__get_eye_pos)>::eval(me, ans, mb_type);
 	}
@@ -704,7 +783,7 @@ namespace FenixUtils
 		return permanent + temporary;
 	}
 
-	float get_dist2(RE::Actor* a, RE::Actor* b)
+	float get_dist2(RE::TESObjectREFR* a, RE::TESObjectREFR* b)
 	{
 		return a->GetPosition().GetSquaredDistance(b->GetPosition());
 	}
@@ -712,43 +791,6 @@ namespace FenixUtils
 	bool TESObjectREFR__HasEffectKeyword(RE::TESObjectREFR* a, RE::BGSKeyword* kwd)
 	{
 		return _generic_foo_<19220, decltype(TESObjectREFR__HasEffectKeyword)>::eval(a, kwd);
-	}
-
-	uint32_t get_item_count(RE::Actor* a, RE::TESBoundObject* item, void* vm, uint32_t stack)
-	{
-		return _generic_foo_<56062, decltype(get_item_count)>::eval(a, item, vm, stack);
-	}
-
-	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation)
-	{
-		RE::NiPoint3 ans;
-
-		float gamma = -rotation.z + 3.1415926f / 2, beta = rotation.x;
-		float cos_g = cos(gamma);
-		float sin_g = sin(gamma);
-		float cos_b = cos(beta);
-		float sin_b = sin(beta);
-
-		ans.x = r * cos_g * cos_b;
-		ans.y = r * sin_g * cos_b;
-		ans.z = r * -sin_b;
-
-		return ans;
-	}
-
-	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation)
-	{
-		RE::NiPoint3 ans;
-
-		float gamma = -rotation.z + 3.1415926f / 2;
-		float cos_g = cos(gamma);
-		float sin_g = sin(gamma);
-
-		ans.x = r * cos_g;
-		ans.y = r * sin_g;
-		ans.z = 0.0f;
-
-		return ans;
 	}
 
 	RE::BGSAttackDataPtr get_attackData(RE::Actor* a)
@@ -834,5 +876,58 @@ namespace FenixUtils
 			return Ay;
 
 		return (Ay * (Bx - x) + By * (x - Ax)) / (Bx - Ax);
+	}
+
+	void AddItem(RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extraList, int count, RE::TESObjectREFR* fromRefr)
+	{
+		return _generic_foo_<36525, decltype(AddItem)>::eval(a, item, extraList, count, fromRefr);
+	}
+
+	void AddItemPlayer(RE::TESBoundObject* item, int count)
+	{
+		return AddItem(RE::PlayerCharacter::GetSingleton(), item, nullptr, count, nullptr);
+	}
+
+	int RemoveItemPlayer(RE::TESBoundObject* item, int count)
+	{
+		return _generic_foo_<16564, decltype(RemoveItemPlayer)>::eval(item, count);
+	}
+	
+	int get_item_count(RE::Actor* a, RE::TESBoundObject* item)
+	{
+		if (auto changes = a->GetInventoryChanges()) {
+			return _generic_foo_<15868, int(RE::InventoryChanges*, RE::TESBoundObject*)>::eval(changes, item);
+		}
+
+		return 0;
+	}
+
+	uint32_t* placeatme(RE::TESObjectREFR* a, uint32_t* handle, RE::TESBoundObject* form, RE::NiPoint3* pos, RE::NiPoint3* angle)
+	{
+		return Impl::placeatme(RE::TESDataHandler::GetSingleton(), handle, form, pos, angle, a->GetParentCell(),
+			a->GetWorldspace(), nullptr, 0, nullptr, false, 1);
+	}
+
+	RE::TESObjectREFR* placeatmepap(RE::TESObjectREFR* a, RE::TESBoundObject* form, int count)
+	{
+		if (!form || !form->IsBoundObject())
+			return nullptr;
+		
+		return Impl::PlaceAtMe(nullptr, 0, a, form, count, false, false);
+	}
+
+	bool is_playable_spel(RE::SpellItem* spel)
+	{
+		using ST = RE::MagicSystem::SpellType;
+		using AV = RE::ActorValue;
+
+		auto type = spel->GetSpellType();
+		if (type == ST::kStaffEnchantment || type == ST::kScroll || type == ST::kSpell || type == ST::kLeveledSpell) {
+			auto av = spel->GetAssociatedSkill();
+			return av == AV::kAlteration || av == AV::kConjuration || av == AV::kDestruction || av == AV::kIllusion ||
+			       av == AV::kRestoration;
+		}
+
+		return false;
 	}
 }
