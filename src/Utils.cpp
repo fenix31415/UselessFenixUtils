@@ -607,6 +607,34 @@ using namespace Impl;
 
 namespace FenixUtils
 {
+	RE::NiPoint3 dir2eulers(const RE::NiPoint3& dir)
+	{
+		float atan_XY = atan2(dir.x, dir.y);
+		float atan_XYZ = atan2(sqrt((dir.x * dir.x) + (dir.y * dir.y)), dir.z);
+		return { atan_XYZ, -atan_XY, 0 };
+	}
+
+	void CombatUtilities__GetAimAnglesFromVector(RE::NiPoint3* P, float* rotZ, float* rotX)
+	{
+		return _generic_foo_<46076, decltype(CombatUtilities__GetAimAnglesFromVector)>::eval(P, rotZ, rotX);
+	}
+
+	RE::Projectile::ProjectileRot rot_at(RE::NiPoint3 dir)
+	{
+		RE::Projectile::ProjectileRot rot;
+		auto len = dir.Unitize();
+		if (len == 0) {
+			rot = { 0, 0 };
+		} else {
+			float polar_angle = _generic_foo_<68820, float(RE::NiPoint3 * p)>::eval(&dir);  // SkyrimSE.exe+c51f70
+			rot = { -asin(dir.z), polar_angle };
+		}
+
+		return rot;
+	}
+
+	RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to) { return rot_at(to - from); }
+
 	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a) { return _generic_foo_<37624, decltype(GetEquippedShield)>::eval(a); }
 
 	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem)
@@ -667,13 +695,10 @@ namespace FenixUtils
 
 	float random_range(float min, float max) { return _generic_foo_<14109, float(float min, float max)>::eval(min, max); }
 
-	int random_range(int min, int max)
+	int32_t random_range(int32_t min, int32_t max)
 	{
-		std::random_device rd;
-		std::mt19937 gen(rd());
-		std::uniform_int_distribution<> distr(min, max);
-
-		return distr(gen);
+		return _generic_foo_<56478, int32_t(void*, uint32_t, void*, int32_t a_min, int32_t a_max)>::eval(nullptr, 0, nullptr, min,
+			max);
 	}
 
 	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker)

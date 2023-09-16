@@ -4,6 +4,11 @@
 #include <xbyak\xbyak.h>
 #include <glm/glm.hpp>
 
+namespace FenixUtils
+{
+	RE::NiPoint3 dir2eulers(const RE::NiPoint3& dir);
+}
+
 namespace DebugAPI_IMPL
 {
 	class DebugAPILine
@@ -156,12 +161,52 @@ namespace DebugAPI_IMPL
 			glm::vec3 center(_center.x, _center.y, _center.z);
 			DebugAPI::DrawSphere(center, r, time, Color, size);
 		}
+
+		template <glm::vec4 Color = Colors::RED>
+		void draw_circle(const RE::NiPoint3& _center, float r, const RE::NiPoint3& dir, float size = 5.0f, int time = 3000)
+		{
+			RE::NiPoint3 right_dir = RE::NiPoint3(0, 0, -1).UnitCross(dir);
+			if (right_dir.SqrLength() == 0)
+				right_dir = { 1, 0, 0 };
+			RE::NiPoint3 up_dir = right_dir.Cross(dir);
+
+			uint32_t count = 40;
+			RE::NiPoint3 last = _center + right_dir * r;
+			for (uint32_t i = 1; i < count; i++) {
+				float alpha = 2 * 3.1415926f / count * i;
+
+				auto cur_p = _center + right_dir * (cos(alpha) * r) + up_dir * (sin(alpha) * r);
+
+				draw_line<Color>(last, cur_p, size, time);
+				last = cur_p;
+			}
+			draw_line<Color>(last, _center + right_dir * r, size, time);
+		}
+
+		template <glm::vec4 Color = Colors::RED>
+		void draw_circle0(const RE::NiPoint3& _center, float r, const RE::NiPoint3& dir, float size = 5.0f)
+		{
+			draw_circle<Color>(_center, r, dir, size, 0);
+		}
+
+		template <glm::vec4 Color = Colors::RED>
+		void draw_sphere_many(const RE::NiPoint3& _center, float r = 5.0f, float size = 5.0f, int time = 3000)
+		{
+			glm::vec3 center(_center.x, _center.y, _center.z);
+			const int N = 10;
+			for (int i = 0; i < N; ++i) {
+				DebugAPI::DrawCircle(center, r, glm::vec3(i * 3.1415 / N, 0.0f, 0.0f), time, Color, size);
+			}
+		}
 	}
 }
 using namespace DebugAPI_IMPL::DrawDebug;
 
 namespace FenixUtils
 {
+	RE::Projectile::ProjectileRot rot_at(RE::NiPoint3 dir);
+	RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to);
+
 	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a);
 	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem);
 
@@ -170,7 +215,7 @@ namespace FenixUtils
 	/// </summary>
 	bool random(float prop);
 	float random_range(float min, float max);
-	int random_range(int min, int max);
+	int32_t random_range(int32_t min, int32_t max);
 	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
 	void damageav(RE::Actor* a, RE::ActorValue av, float val);
 	RE::TESObjectWEAP* get_UnarmedWeap();
