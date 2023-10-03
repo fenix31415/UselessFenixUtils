@@ -68,7 +68,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-add_subdirectory($ENV{CommonLibSSE} $ENV{CommonLibSSE}/build)
+add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 
 find_package(spdlog REQUIRED CONFIG)
 
