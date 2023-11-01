@@ -4,10 +4,8 @@
 #include <xbyak\xbyak.h>
 #include <glm/glm.hpp>
 
-namespace FenixUtils
-{
-	RE::NiPoint3 dir2eulers(const RE::NiPoint3& dir);
-}
+#include "json/json.h"
+#include "magic_enum.hpp"
 
 namespace DebugAPI_IMPL
 {
@@ -204,43 +202,6 @@ using namespace DebugAPI_IMPL::DrawDebug;
 
 namespace FenixUtils
 {
-	RE::Projectile::ProjectileRot rot_at(RE::NiPoint3 dir);
-	RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to);
-
-	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a);
-	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem);
-
-	/// <summary>
-	/// random less than prop
-	/// </summary>
-	bool random(float prop);
-	float random_range(float min, float max);
-	int32_t random_range(int32_t min, int32_t max);
-	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
-	void damageav(RE::Actor* a, RE::ActorValue av, float val);
-	RE::TESObjectWEAP* get_UnarmedWeap();
-	float PlayerCharacter__get_reach(RE::Actor* a);
-	float GetHeadingAngle(RE::TESObjectREFR* a, const RE::NiPoint3& a_pos, bool a_abs);
-	void UnequipItem(RE::Actor* a, RE::TESBoundObject* item);
-	void knock(RE::Actor* target, RE::Actor* aggressor, float KnockDown);
-	void cast_spell(RE::Actor* victim, RE::Actor* attacker, RE::SpellItem* spell);
-	RE::NiPoint3* Actor__get_eye_pos(RE::Actor* me, RE::NiPoint3& ans, int mb_type);
-	float clamp01(float t);
-
-	template <float val = 0.5f>
-	void stagger(RE::Actor* victim, RE::Actor* attacker = nullptr)
-	{
-		float stagDir = 0.0f;
-		if (attacker && victim->GetHandle() != attacker->GetHandle()) {
-			auto heading = GetHeadingAngle(victim, attacker->GetPosition(), false);
-			stagDir = (heading >= 0.0f) ? heading / 360.0f : (360.0f + heading) / 360.0f;
-		}
-
-		victim->SetGraphVariableFloat("staggerDirection", stagDir);
-		victim->SetGraphVariableFloat("staggerMagnitude", val);
-		victim->NotifyAnimationGraph("staggerStart");
-	}
-
 	template <int id, typename x_Function>
 	class _generic_foo_;
 
@@ -271,6 +232,193 @@ namespace FenixUtils
 			return trampoline.write_call<BRANCH_TYPE>(funcAddr + offset, (std::uintptr_t)result);
 	}
 
+	template <int ID, int offset = 0x0>
+	void writebytes(const std::string_view& data)
+	{
+		REL::safe_write(REL::ID(ID).address() + offset, data.data(), data.size());
+	}
+
+	enum class LineOfSightLocation : uint32_t
+	{
+		kNone,
+		kEyes,
+		kHead,
+		kTorso,
+		kFeet
+	};
+	
+	namespace Geom
+	{
+		// Axis: y -- forward, x -- right, z angle = 0 => y = 1, x = 0.
+		// Angles: x:-pi/2 (up)..pi/2 (down), y:0, z:0 (along y)..2pi
+
+		float NiASin(float alpha);
+
+		// --- Vector (dir) to angles ---
+
+		float GetUnclampedZAngleFromVector(const RE::NiPoint3& V);
+		float GetZAngleFromVector(const RE::NiPoint3& V);
+		void CombatUtilities__GetAimAnglesFromVector(const RE::NiPoint3& V, float& rotZ, float& rotX);
+		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& dir);
+		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to);
+
+		// ^^^ Vector (dir) to angles ^^^
+
+		// --- rotations ---
+
+		RE::NiPoint3 angles2dir(const RE::NiPoint3& angles);
+		// Get vector with len=r, with euler=angles
+		RE::NiPoint3 rotate(float r, const RE::NiPoint3& angles);
+		RE::NiPoint3 rotate(const RE::NiPoint3& A, const RE::NiPoint3& angles);
+		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& axis_dir);
+		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& origin, const RE::NiPoint3& axis_dir);
+		// rotate vel_cur to dir_final with max angle max_alpha
+		RE::NiPoint3 rotateVel(const RE::NiPoint3& vel_cur, float max_alpha, const RE::NiPoint3& dir_final);
+
+		// ^^^ rotations ^^^
+
+		namespace Projectile
+		{
+			void update_node_rotation(RE::Projectile* proj, const RE::NiPoint3& V);
+			void update_node_rotation(RE::Projectile* proj);
+			void aimToPoint(RE::Projectile* proj, const RE::NiPoint3& P);
+		}
+
+		namespace Actor
+		{
+			RE::NiPoint3 CalculateLOSLocation(RE::TESObjectREFR* refr, LineOfSightLocation los_loc);
+			// get point `caster` is looking at
+			RE::NiPoint3 raycast(RE::Actor* caster);
+			RE::NiPoint3 AnticipatePos(RE::Actor* a, float dtime = 0);
+			LineOfSightLocation Actor__CalculateLOS(RE::Actor* caster, RE::Actor* target, float viewCone);
+			bool ActorInLOS(RE::Actor* caster, RE::Actor* target, float viewCone);
+			// get polar_angle from los a to target_pos
+			float Actor__CalculateAimDelta(RE::Actor* a, const RE::NiPoint3& target_pos);
+			// get CalculateAimDelta and compare it with viewCone / 2
+			bool Actor__IsPointInAimCone(RE::Actor* a, RE::NiPoint3* target_pos, float viewCone);
+		}
+	}
+
+	namespace Random
+	{
+		// random(0..1) <= chance
+		bool RandomBoolChance(float prop);
+		float Float(float min, float max);
+		float FloatChecked(float min, float max);
+		float FloatTwoPi();
+		float Float0To1();
+		float FloatNeg1To1();
+		int32_t random_range(int32_t min, int32_t max);
+	}
+
+	namespace Json
+	{
+		// Returns mod mask number or -1 if missing
+		int get_mod_index(std::string_view name);
+		// Returns number from `Skyrim.esm|0x1000` or `0x10100000`
+		uint32_t get_formid(const std::string& name);
+
+		// --- getting values ---
+
+		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const std::string& field_name);
+		template <RE::NiPoint3 default_val = RE::NiPoint3(0, 0, 0)>
+		RE::NiPoint3 mb_getPoint3(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			return jobj.isMember(field_name) ? getPoint3(jobj, field_name) : default_val;
+		}
+		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const std::string& field_name);
+		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const std::string& field_name);
+		std::string getString(const ::Json::Value& jobj, const std::string& field_name);
+		std::string mb_getString(const ::Json::Value& jobj, const std::string& field_name);
+		float getFloat(const ::Json::Value& jobj, const std::string& field_name);
+		template <float default_val = 0.0f>
+		float mb_getFloat(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			return jobj.isMember(field_name) ? getFloat(jobj, field_name) : default_val;
+		}
+		bool getBool(const ::Json::Value& jobj, const std::string& field_name);
+		uint32_t getUint32(const ::Json::Value& jobj, const std::string& field_name);
+
+		template <typename Enum>
+		Enum string2enum(const std::string& val)
+		{
+			return magic_enum::enum_cast<Enum>(val).value();
+		}
+
+		// Get string data from val and return enum
+		template <typename Enum>
+		Enum read_enum(const ::Json::Value& val)
+		{
+			return string2enum<Enum>(val.asString());
+		}
+
+		// Get string data from jobj[field_name] and return enum
+		template <typename Enum>
+		Enum read_enum(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			return read_enum<Enum>(jobj[field_name]);
+		}
+
+		// Get data from jobj[field_name], if present, return def otherwise
+		template <auto def>
+		auto mb_read_field(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			if constexpr (std::is_same_v<decltype(def), bool>) {
+				if (jobj.isMember(field_name))
+					return getBool(jobj, field_name);
+				else
+					return def;
+			} else if constexpr (std::is_same_v<decltype(def), uint32_t>) {
+				if (jobj.isMember(field_name))
+					return getUint32(jobj, field_name);
+				else
+					return def;
+			} else {
+				if (jobj.isMember(field_name))
+					return read_enum<decltype(def)>(jobj, field_name);
+				else
+					return def;
+			}
+		}
+
+		// ^^^ getting values ^^^
+	}
+
+	float Projectile__GetSpeed(RE::Projectile* proj);
+	void Projectile__set_collision_layer(RE::Projectile* proj, RE::COL_LAYER collayer);
+
+	void TESObjectREFR__SetAngleOnReferenceX(RE::TESObjectREFR* refr, float angle_x);
+	void TESObjectREFR__SetAngleOnReferenceZ(RE::TESObjectREFR* refr, float angle_z);
+
+
+	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a);
+	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem);
+
+	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
+	void damageav(RE::Actor* a, RE::ActorValue av, float val);
+	RE::TESObjectWEAP* get_UnarmedWeap();
+	float PlayerCharacter__get_reach(RE::Actor* a);
+	float GetHeadingAngle(RE::TESObjectREFR* a, const RE::NiPoint3& a_pos, bool a_abs);
+	void UnequipItem(RE::Actor* a, RE::TESBoundObject* item);
+	void knock(RE::Actor* target, RE::Actor* aggressor, float KnockDown);
+	void cast_spell(RE::Actor* victim, RE::Actor* attacker, RE::SpellItem* spell);
+	float clamp01(float t);
+
+	template <float val = 0.5f>
+	void stagger(RE::Actor* victim, RE::Actor* attacker = nullptr)
+	{
+		float stagDir = 0.0f;
+		if (attacker && victim->GetHandle() != attacker->GetHandle()) {
+			auto heading = GetHeadingAngle(victim, attacker->GetPosition(), false);
+			stagDir = (heading >= 0.0f) ? heading / 360.0f : (360.0f + heading) / 360.0f;
+		}
+
+		victim->SetGraphVariableFloat("staggerDirection", stagDir);
+		victim->SetGraphVariableFloat("staggerMagnitude", val);
+		victim->NotifyAnimationGraph("staggerStart");
+	}
+
 	template<float min, float max>
 	static float lerp(float k)
 	{
@@ -285,18 +433,7 @@ namespace FenixUtils
 	
 	// ignore cells
 	float get_dist2(RE::TESObjectREFR* a, RE::TESObjectREFR* b);
-	void rotate(RE::NiPoint3& A, const RE::NiPoint3& rot);
-	void rotateSkyrim(RE::NiPoint3& A, RE::NiPoint3 rot);
-	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation);
-	RE::NiPoint3 rotateZ(float r, float rot_z);
-	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation);
 
-
-	template <int ID, int offset = 0x0>
-	void writebytes(const std::string_view& data)
-	{
-		REL::safe_write(REL::ID(ID).address() + offset, data.data(), data.size());
-	}
 
 	RE::BGSAttackDataPtr get_attackData(RE::Actor* a);
 	bool is_powerattacking(RE::Actor* a);

@@ -607,98 +607,325 @@ using namespace Impl;
 
 namespace FenixUtils
 {
-	RE::NiPoint3 dir2eulers(const RE::NiPoint3& dir)
+	namespace Geom
 	{
-		float atan_XY = atan2(dir.x, dir.y);
-		float atan_XYZ = atan2(sqrt((dir.x * dir.x) + (dir.y * dir.y)), dir.z);
-		return { atan_XYZ, -atan_XY, 0 };
-	}
+		float NiASin(float alpha) { return _generic_foo_<17744, decltype(NiASin)>::eval(alpha); }
 
-	void CombatUtilities__GetAimAnglesFromVector(RE::NiPoint3* P, float* rotZ, float* rotX)
-	{
-		return _generic_foo_<46076, decltype(CombatUtilities__GetAimAnglesFromVector)>::eval(P, rotZ, rotX);
-	}
-
-	RE::Projectile::ProjectileRot rot_at(RE::NiPoint3 dir)
-	{
-		RE::Projectile::ProjectileRot rot;
-		auto len = dir.Unitize();
-		if (len == 0) {
-			rot = { 0, 0 };
-		} else {
-			float polar_angle = _generic_foo_<68820, float(RE::NiPoint3 * p)>::eval(&dir);  // SkyrimSE.exe+c51f70
-			rot = { -asin(dir.z), polar_angle };
+		float GetUnclampedZAngleFromVector(const RE::NiPoint3& V)
+		{
+			return _generic_foo_<68821, decltype(GetUnclampedZAngleFromVector)>::eval(V);
 		}
 
-		return rot;
+		float GetZAngleFromVector(const RE::NiPoint3& V) { return _generic_foo_<68820, decltype(GetZAngleFromVector)>::eval(V); }
+
+		void CombatUtilities__GetAimAnglesFromVector(const RE::NiPoint3& V, float& rotZ, float& rotX)
+		{
+			return _generic_foo_<46076, decltype(CombatUtilities__GetAimAnglesFromVector)>::eval(V, rotZ, rotX);
+		}
+
+		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& V)
+		{
+			RE::Projectile::ProjectileRot rot;
+			CombatUtilities__GetAimAnglesFromVector(V, rot.z, rot.x);
+			return rot;
+		}
+
+		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to) { return rot_at(to - from); }
+
+		// Angles -> dir: FromEulerAnglesZYX, A.{A, B, C}.Y.Unitize()
+
+		// Same as FromEulerAnglesZYX.{A, B, C}.Y
+		RE::NiPoint3 angles2dir(const RE::NiPoint3& angles)
+		{
+			RE::NiPoint3 ans;
+
+			float sinx = sinf(angles.x);
+			float cosx = cosf(angles.x);
+			float sinz = sinf(angles.z);
+			float cosz = cosf(angles.z);
+
+			ans.x = cosx * sinz;
+			ans.y = cosx * cosz;
+			ans.z = -sinx;
+
+			return ans;
+		}
+
+		RE::NiPoint3 rotate(float r, const RE::NiPoint3& angles) { return angles2dir(angles) * r; }
+
+		RE::NiPoint3 rotate(const RE::NiPoint3& A, const RE::NiPoint3& angles)
+		{
+			RE::NiMatrix3 R;
+			R.EulerAnglesToAxesZXY(angles);
+			return R * A;
+		}
+
+		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& axis)
+		{
+			float cos_phi = cos(alpha);
+			float sin_phi = sin(alpha);
+			float one_cos_phi = 1 - cos_phi;
+
+			RE::NiMatrix3 R = { { cos_phi + one_cos_phi * axis.x * axis.x, axis.x * axis.y * one_cos_phi - axis.z * sin_phi,
+									axis.x * axis.z * one_cos_phi + axis.y * sin_phi },
+				{ axis.y * axis.x * one_cos_phi + axis.z * sin_phi, cos_phi + axis.y * axis.y * one_cos_phi,
+					axis.y * axis.z * one_cos_phi - axis.x * sin_phi },
+				{ axis.z * axis.x * one_cos_phi - axis.y * sin_phi, axis.z * axis.y * one_cos_phi + axis.x * sin_phi,
+					cos_phi + axis.z * axis.z * one_cos_phi } };
+
+			return R * P;
+		}
+
+		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& origin, const RE::NiPoint3& axis_dir)
+		{
+			return rotate(P - origin, alpha, axis_dir) + origin;
+		}
+
+		float get_rotation_angle(const RE::NiPoint3& vel_cur, const RE::NiPoint3& dir_final)
+		{
+			return acosf(std::min(1.0f, vel_cur.Dot(dir_final) / vel_cur.Length()));
+		}
+
+		float clamp_angle(float alpha, float max_alpha)
+		{
+			if (alpha >= 0)
+				return std::min(max_alpha, alpha);
+			else
+				return std::max(-max_alpha, alpha);
+		}
+
+		bool is_angle_small(float alpha) { return abs(alpha) < 0.001f; }
+
+		RE::NiPoint3 rotateVel(const RE::NiPoint3& vel_cur, float max_alpha, const RE::NiPoint3& dir_final)
+		{
+			float needed_angle = get_rotation_angle(vel_cur, dir_final);
+			if (!is_angle_small(needed_angle)) {
+				float phi = clamp_angle(needed_angle, max_alpha);
+				return rotate(vel_cur, phi, vel_cur.UnitCross(dir_final));
+			} else {
+				return vel_cur;
+			}
+		}
+
+		namespace Projectile
+		{
+			void update_node_rotation(RE::Projectile* proj, const RE::NiPoint3& V)
+			{
+				float rotZ, rotX;
+				CombatUtilities__GetAimAnglesFromVector(V, rotZ, rotX);
+				TESObjectREFR__SetAngleOnReferenceX(proj, rotX);
+				TESObjectREFR__SetAngleOnReferenceZ(proj, rotZ);
+				if (auto node = proj->Get3D()) {
+					node->local.rotate = RE::NiMatrix3(rotX, 0, rotZ);
+				}
+			}
+
+			void update_node_rotation(RE::Projectile* proj) { return update_node_rotation(proj, proj->linearVelocity); }
+
+			void aimToPoint(RE::Projectile* proj, const RE::NiPoint3& P)
+			{
+				auto dir = P - proj->GetPosition();
+				auto angles = FenixUtils::Geom::rot_at(dir);
+
+				FenixUtils::TESObjectREFR__SetAngleOnReferenceX(proj, angles.x);
+				FenixUtils::TESObjectREFR__SetAngleOnReferenceZ(proj, angles.z);
+
+				if (proj->IsMissileProjectile()) {
+					if (float dist = dir.SqrLength(); dist > 0.0000001f) {
+						proj->linearVelocity = dir * sqrtf(proj->linearVelocity.SqrLength() / dist);
+					}
+					FenixUtils::Geom::Projectile::update_node_rotation(proj);
+				}
+
+				proj->flags.reset(RE::Projectile::Flags::kAutoAim);
+			}
+		}
+
+		namespace Actor
+		{
+			RE::NiPoint3 CalculateLOSLocation(RE::TESObjectREFR* refr, LineOfSightLocation los_loc)
+			{
+				return _generic_foo_<46021, decltype(CalculateLOSLocation)>::eval(refr, los_loc);
+			}
+
+			RE::NiPoint3 raycast(RE::Actor* caster)
+			{
+				auto havokWorldScale = RE::bhkWorld::GetWorldScale();
+				RE::bhkPickData pick_data;
+				RE::NiPoint3 ray_start, ray_end;
+
+				ray_start = CalculateLOSLocation(caster, LineOfSightLocation::kHead);
+				ray_end = ray_start + FenixUtils::Geom::rotate(20000, caster->data.angle);
+				pick_data.rayInput.from = ray_start * havokWorldScale;
+				pick_data.rayInput.to = ray_end * havokWorldScale;
+
+				uint32_t collisionFilterInfo = 0;
+				caster->GetCollisionFilterInfo(collisionFilterInfo);
+				pick_data.rayInput.filterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
+				                                static_cast<uint32_t>(RE::COL_LAYER::kCharController);
+
+				caster->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
+				RE::NiPoint3 hitpos;
+				if (pick_data.rayOutput.HasHit()) {
+					hitpos = ray_start + (ray_end - ray_start) * pick_data.rayOutput.hitFraction;
+				} else {
+					hitpos = ray_end;
+				}
+				return hitpos;
+			}
+
+			RE::NiPoint3 AnticipatePos(RE::Actor* a, float dtime)
+			{
+				RE::NiPoint3 ans, eye_pos;
+				a->GetLinearVelocity(ans);
+				ans *= dtime;
+				eye_pos = CalculateLOSLocation(a, LineOfSightLocation::kTorso);
+				ans += eye_pos;
+				return ans;
+			}
+
+			LineOfSightLocation Actor__CalculateLOS(RE::Actor* caster, RE::Actor* target, float viewCone)
+			{
+				return _generic_foo_<36752, decltype(Actor__CalculateLOS)>::eval(caster, target, viewCone);
+			}
+
+			bool ActorInLOS(RE::Actor* caster, RE::Actor* target, float viewCone)
+			{
+				return Actor__CalculateLOS(caster, target, viewCone) != LineOfSightLocation::kNone;
+			}
+
+			float Actor__CalculateAimDelta(RE::Actor* a, const RE::NiPoint3& target_pos)
+			{
+				return _generic_foo_<36757, decltype(Actor__CalculateAimDelta)>::eval(a, target_pos);
+			}
+
+			bool Actor__IsPointInAimCone(RE::Actor* a, RE::NiPoint3* target_pos, float viewCone)
+			{
+				return _generic_foo_<36756, decltype(Actor__IsPointInAimCone)>::eval(a, target_pos, viewCone);
+			}
+		}
 	}
 
-	RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to) { return rot_at(to - from); }
+	namespace Random
+	{
+		// random(0..1) <= chance
+		bool RandomBoolChance(float prop) { return _generic_foo_<26009, decltype(RandomBoolChance)>::eval(prop); }
+
+		float Float(float min, float max) { return _generic_foo_<14109, decltype(Float)>::eval(min, max); }
+
+		float FloatChecked(float min, float max) { return _generic_foo_<25867, decltype(FloatChecked)>::eval(min, max); }
+
+		float FloatTwoPi() { return _generic_foo_<15093, decltype(FloatTwoPi)>::eval(); }
+
+		float Float0To1() { return _generic_foo_<28658, decltype(FloatTwoPi)>::eval(); }
+
+		float FloatNeg1To1() { return _generic_foo_<28716, decltype(FloatTwoPi)>::eval(); }
+
+		int32_t random_range(int32_t min, int32_t max)
+		{
+			return _generic_foo_<56478, int32_t(void*, uint32_t, void*, int32_t a_min, int32_t a_max)>::eval(nullptr, 0, nullptr,
+				min, max);
+		}
+	}
+
+	namespace Json
+	{
+		int get_mod_index(std::string_view name)
+		{
+			auto esp = RE::TESDataHandler::GetSingleton()->LookupModByName(name);
+			if (!esp)
+				return -1;
+			return !esp->IsLight() ? esp->compileIndex << 24 : (0xFE000 | esp->smallFileCompileIndex) << 12;
+		}
+
+		uint32_t get_formid(const std::string& name)
+		{
+			if (auto pos = name.find('|'); pos != std::string::npos) {
+				auto ind = get_mod_index(name.substr(0, pos));
+				return ind | std::stoul(name.substr(pos + 1), nullptr, 16);
+			} else {
+				return std::stoul(name, nullptr, 16);
+			}
+		}
+
+		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			auto& point = jobj[field_name];
+			return { point[0].asFloat(), point[1].asFloat(), point[2].asFloat() };
+		}
+
+		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			auto& point = jobj[field_name];
+			return { point[0].asFloat(), point[1].asFloat() };
+		}
+
+		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			return jobj.isMember(field_name) ? getPoint2(jobj, field_name) : RE::Projectile::ProjectileRot{ 0, 0 };
+		}
+
+		std::string getString(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			return jobj[field_name].asString();
+		}
+
+		std::string mb_getString(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			return jobj.isMember(field_name) ? getString(jobj, field_name) : "";
+		}
+
+		float getFloat(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			return jobj[field_name].asFloat();
+		}
+
+		bool getBool(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			return jobj[field_name].asBool();
+		}
+
+		uint32_t getUint32(const ::Json::Value& jobj, const std::string& field_name)
+		{
+			assert(jobj.isMember(field_name));
+			return jobj[field_name].asUInt();
+		}
+	}
+
+	float Projectile__GetSpeed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(Projectile__GetSpeed)>::eval(proj); }
+
+	void Projectile__set_collision_layer(RE::Projectile* proj, RE::COL_LAYER collayer)
+	{
+		auto shape = (RE::bhkShapePhantom*)proj->unk0E0;
+		auto ref = (RE::hkpShapePhantom*)shape->referencedObject.get();
+		auto& colFilterInfo = ref->collidable.broadPhaseHandle.collisionFilterInfo;
+		colFilterInfo &= ~0x7F;
+		colFilterInfo |= static_cast<uint32_t>(collayer);
+	}
+
+	void TESObjectREFR__SetAngleOnReferenceX(RE::TESObjectREFR* refr, float angle_x)
+	{
+		return _generic_foo_<19360, decltype(TESObjectREFR__SetAngleOnReferenceX)>::eval(refr, angle_x);
+	}
+
+	void TESObjectREFR__SetAngleOnReferenceZ(RE::TESObjectREFR* refr, float angle_z)
+	{
+		return _generic_foo_<19362, decltype(TESObjectREFR__SetAngleOnReferenceZ)>::eval(refr, angle_z);
+	}
+
+
+
 
 	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a) { return _generic_foo_<37624, decltype(GetEquippedShield)>::eval(a); }
 
 	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem)
 	{
 		return _generic_foo_<11194, decltype(getAVEffectSetting)>::eval(mgitem);
-	}
-
-	void rotate(RE::NiPoint3& A, const RE::NiPoint3& rot)
-	{
-		RE::NiMatrix3 m;
-		m.EulerAnglesToAxesZXY(rot);
-		A = m * A;
-	}
-
-	void rotateSkyrim(RE::NiPoint3& A, RE::NiPoint3 rot)
-	{
-		rot.z = -rot.z + 3.1415926f * 0.5f;
-		RE::NiMatrix3 m;
-		m.EulerAnglesToAxesZXY(rot);
-		A = m * A;
-	}
-
-	RE::NiPoint3 rotate(float r, const RE::NiPoint3& rotation)
-	{
-		RE::NiPoint3 ans;
-
-		float gamma = -rotation.z + 3.1415926f / 2, beta = rotation.x;
-		float cos_g = cos(gamma);
-		float sin_g = sin(gamma);
-		float cos_b = cos(beta);
-		float sin_b = sin(beta);
-
-		ans.x = r * cos_g * cos_b;
-		ans.y = r * sin_g * cos_b;
-		ans.z = r * -sin_b;
-
-		return ans;
-	}
-
-	RE::NiPoint3 rotateZ(float r, float rot_z)
-	{
-		RE::NiPoint3 ans;
-
-		float gamma = -rot_z + 3.1415926f / 2;
-		float cos_g = cos(gamma);
-		float sin_g = sin(gamma);
-
-		ans.x = r * cos_g;
-		ans.y = r * sin_g;
-		ans.z = 0.0f;
-
-		return ans;
-	}
-
-	RE::NiPoint3 rotateZ(float r, const RE::NiPoint3& rotation) { return rotateZ(r, rotation.z); }
-
-	bool random(float prop) { return _generic_foo_<26009, decltype(random)>::eval(prop); }
-
-	float random_range(float min, float max) { return _generic_foo_<14109, float(float min, float max)>::eval(min, max); }
-
-	int32_t random_range(int32_t min, int32_t max)
-	{
-		return _generic_foo_<56478, int32_t(void*, uint32_t, void*, int32_t a_min, int32_t a_max)>::eval(nullptr, 0, nullptr, min,
-			max);
 	}
 
 	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker)
@@ -761,11 +988,6 @@ namespace FenixUtils
 		if (caster && spell) {
 			caster->CastSpellImmediate(spell, false, victim, 1.0f, false, 0.0f, attacker);
 		}
-	}
-
-	RE::NiPoint3* Actor__get_eye_pos(RE::Actor* me, RE::NiPoint3& ans, int mb_type)
-	{
-		return _generic_foo_<36755, decltype(Actor__get_eye_pos)>::eval(me, ans, mb_type);
 	}
 
 	void play_sound(RE::TESObjectREFR* a, int formid)
