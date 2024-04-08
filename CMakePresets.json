@@ -47,6 +47,16 @@
       "name": "windows"
     },
     {
+      "cacheVariables": {
+        "UseUselessUtils": {
+          "type": "BOOL",
+          "value": "TRUE"
+        }
+      },
+      "hidden": true,
+      "name": "utils"
+    },
+    {
       "binaryDir": "${sourceDir}/buildvr",
       "cacheVariables": {
         "BUILD_SKYRIMVR": true
@@ -104,6 +114,14 @@
       ],
       "name": "vs2022-windows-vcpkg-vr",
       "toolset": "v143"
+    },
+    {
+      "inherits": [ "vs2022-windows-vcpkg" ],
+      "name": "default"
+    },
+    {
+      "inherits": [ "vs2022-windows-vcpkg", "utils" ],
+      "name": "default-utils"
     }
   ],
   "version": 2

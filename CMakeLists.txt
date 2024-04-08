@@ -71,6 +71,8 @@ set(Boost_USE_STATIC_LIBS ON)
 add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 
 find_package(spdlog REQUIRED CONFIG)
+find_package(jsoncpp REQUIRED CONFIG)
+find_package(magic_enum CONFIG REQUIRED)
 
 # ---- Add source files ----
 
@@ -78,6 +80,8 @@ set(SOURCES
 	src/PCH.h
   include/UselessFenixUtils.h
   src/Utils.cpp
+  src/Utils1.cpp
+  include/Utils1.h
 )
 
 source_group(
@@ -118,6 +122,9 @@ target_include_directories(
 	${PROJECT_NAME}
 	PUBLIC
 		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/render>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/utilities>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/Havok>"
 		"$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}/include
@@ -129,6 +136,8 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
+    magic_enum::magic_enum
+		JsonCpp::JsonCpp
 )
 
 if (MSVC)

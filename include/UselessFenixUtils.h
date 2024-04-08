@@ -1,120 +1,29 @@
 #pragma once
 #include <boost\type_traits\function_traits.hpp>
 #define NOGDI
+#pragma warning(push)
+#pragma warning(disable: 4702)
 #include <xbyak\xbyak.h>
+#pragma warning(pop)
+
 #include <glm/glm.hpp>
 
 #include "json/json.h"
 #include "magic_enum.hpp"
 
-namespace DebugAPI_IMPL
+namespace DebugRender
 {
-	class DebugAPILine
+	class UpdateHooks
 	{
 	public:
-		DebugAPILine(glm::vec3 from, glm::vec3 to, glm::vec4 color, float lineThickness, unsigned __int64 destroyTickCount);
-
-		glm::vec3 From;
-		glm::vec3 To;
-		glm::vec4 Color;
-		float fColor;
-		float Alpha;
-		float LineThickness;
-
-		unsigned __int64 DestroyTickCount;
-	};
-
-	class DebugAPI
-	{
-	public:
-		static void Update();
-
-		static RE::GPtr<RE::IMenu> GetHUD();
-
-		static void DrawLine2D(RE::GPtr<RE::GFxMovieView> movie, glm::vec2 from, glm::vec2 to, float color, float lineThickness, float alpha);
-		static void DrawLine2D(RE::GPtr<RE::GFxMovieView> movie, glm::vec2 from, glm::vec2 to, glm::vec4 color, float lineThickness);
-		static void DrawLine3D(RE::GPtr<RE::GFxMovieView> movie, glm::vec3 from, glm::vec3 to, float color, float lineThickness, float alpha);
-		static void DrawLine3D(RE::GPtr<RE::GFxMovieView> movie, glm::vec3 from, glm::vec3 to, glm::vec4 color, float lineThickness);
-		static void ClearLines2D(RE::GPtr<RE::GFxMovieView> movie);
-
-		static void DrawLineForMS(const glm::vec3& from, const glm::vec3& to, int liftetimeMS = 10, const glm::vec4& color = { 1.0f, 0.0f, 0.0f, 1.0f }, float lineThickness = 1);
-		static void DrawSphere(glm::vec3, float radius, int liftetimeMS = 10, const glm::vec4& color = { 1.0f, 0.0f, 0.0f, 1.0f }, float lineThickness = 1);
-		static void DrawCircle(glm::vec3, float radius, glm::vec3 eulerAngles, int liftetimeMS = 10, const glm::vec4& color = { 1.0f, 0.0f, 0.0f, 1.0f }, float lineThickness = 1);
-
-		static std::mutex LinesToDraw_mutex;
-		static std::vector<DebugAPILine*> LinesToDraw;
-
-		static bool DEBUG_API_REGISTERED;
-
-		static constexpr int CIRCLE_NUM_SEGMENTS = 32;
-
-		static constexpr float DRAW_LOC_MAX_DIF = 5.0f;
-
-		static glm::vec2 WorldToScreenLoc(RE::GPtr<RE::GFxMovieView> movie, glm::vec3 worldLoc);
-		static float RGBToHex(glm::vec3 rgb);
-
-		static void FastClampToScreen(glm::vec2& point);
-
-		// 	static void ClampVectorToScreen(glm::vec2& from, glm::vec2& to);
-		// 	static void ClampPointToScreen(glm::vec2& point, float lineAngle);
-
-		static bool IsOnScreen(glm::vec2 from, glm::vec2 to);
-		static bool IsOnScreen(glm::vec2 point);
-
-		static void CacheMenuData();
-
-		static bool CachedMenuData;
-
-		static float ScreenResX;
-		static float ScreenResY;
+		static void Hook() { _Nullsub = SKSE::GetTrampoline().write_call<5>(REL::ID(35565).address() + 0x748, Nullsub); }
 
 	private:
-		static float ConvertComponentR(float value);
-		static float ConvertComponentG(float value);
-		static float ConvertComponentB(float value);
-		// returns true if there is already a line with the same color at around the same from and to position
-		// with some leniency to bundle together lines in roughly the same spot (see DRAW_LOC_MAX_DIF)
-		static DebugAPILine* GetExistingLine(const glm::vec3& from, const glm::vec3& to, const glm::vec4& color, float lineThickness);
+		static void Nullsub();
+		static inline REL::Relocation<decltype(Nullsub)> _Nullsub;
 	};
 
-	class DebugOverlayMenu : RE::IMenu
-	{
-	public:
-		static constexpr const char* MENU_PATH = "BetterThirdPersonSelection/overlay_menu";
-		static constexpr const char* MENU_NAME = "HUD Menu";
-
-		DebugOverlayMenu();
-
-		static void Register();
-
-		static void Show();
-		static void Hide();
-
-		static RE::stl::owner<RE::IMenu*> Creator() { return new DebugOverlayMenu(); }
-
-		void AdvanceMovie(float a_interval, std::uint32_t a_currentTime) override;
-
-	private:
-		class Logger : public RE::GFxLog
-		{
-		public:
-			void LogMessageVarg(LogMessageType, const char* a_fmt, std::va_list a_argList) override
-			{
-				std::string fmt(a_fmt ? a_fmt : "");
-				while (!fmt.empty() && fmt.back() == '\n') {
-					fmt.pop_back();
-				}
-
-				std::va_list args;
-				va_copy(args, a_argList);
-				std::vector<char> buf(static_cast<std::size_t>(std::vsnprintf(0, 0, fmt.c_str(), a_argList) + 1));
-				std::vsnprintf(buf.data(), buf.size(), fmt.c_str(), args);
-				va_end(args);
-
-				logger::info("{}"sv, buf.data());
-			}
-		};
-	};
+	void OnMessage(SKSE::MessagingInterface::Message* message);
 
 	namespace DrawDebug
 	{
@@ -125,80 +34,509 @@ namespace DebugAPI_IMPL
 			static constexpr glm::vec4 BLU = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
 		}
 
-		template <glm::vec4 Color = Colors::RED>
-		void draw_line(const RE::NiPoint3& _from, const RE::NiPoint3& _to, float size = 5.0f, int time = 3000)
-		{
-			glm::vec3 from(_from.x, _from.y, _from.z);
-			glm::vec3 to(_to.x, _to.y, _to.z);
-			DebugAPI::DrawLineForMS(from, to, time, Color, size);
-		}
+		void draw_line(const RE::NiPoint3& start, const RE::NiPoint3& end, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_line0(const RE::NiPoint3& start, const RE::NiPoint3& end, glm::vec4 color = Colors::RED,
+			bool drawOnTop = false);
+		void draw_sphere(const RE::NiPoint3& center, float radius, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_sphere0(const RE::NiPoint3& center, float radius, glm::vec4 color = Colors::RED, bool drawOnTop = false);
+		void draw_point(const RE::NiPoint3& position, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_point0(const RE::NiPoint3& position, glm::vec4 color = Colors::RED, bool drawOnTop = false);
+		
+		void draw_shape(const RE::CombatMathUtilities::Capsule& cap, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_shape0(const RE::CombatMathUtilities::Capsule& cap, glm::vec4 color, bool drawOnTop = false);
 
-		template <glm::vec4 Color = Colors::RED>
-		void draw_line0(const RE::NiPoint3& _from, const RE::NiPoint3& _to, float size = 5.0f)
-		{
-			return draw_line<Color>(_from, _to, size, 0);
-		}
+		void draw_shape(const RE::CombatMathUtilities::Sphere& s, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_shape0(const RE::CombatMathUtilities::Sphere& s, glm::vec4 color = Colors::RED, bool drawOnTop = false);
 
-		template <glm::vec4 Color = Colors::RED>
-		void draw_point(const RE::NiPoint3& _pos, float size = 5.0f, int time = 3000)
-		{
-			glm::vec3 from(_pos.x, _pos.y, _pos.z);
-			glm::vec3 to(_pos.x, _pos.y, _pos.z + 5);
-			DebugAPI::DrawLineForMS(from, to, time, Color, size);
-		}
+		void draw_shape(RE::CombatMathUtilities::MovingCapsule cap, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_shape0(RE::CombatMathUtilities::MovingCapsule cap, glm::vec4 color = Colors::RED, bool drawOnTop = false);
 
-		template <glm::vec4 Color = Colors::RED>
-		void draw_point0(const RE::NiPoint3& _pos, float size = 5.0f)
-		{
-			return draw_point<Color>(_pos, size, 0);
-		}
-
-		template <glm::vec4 Color = Colors::RED>
-		void draw_sphere(const RE::NiPoint3& _center, float r = 5.0f, float size = 5.0f, int time = 3000)
-		{
-			glm::vec3 center(_center.x, _center.y, _center.z);
-			DebugAPI::DrawSphere(center, r, time, Color, size);
-		}
-
-		template <glm::vec4 Color = Colors::RED>
-		void draw_circle(const RE::NiPoint3& _center, float r, const RE::NiPoint3& dir, float size = 5.0f, int time = 3000)
-		{
-			RE::NiPoint3 right_dir = RE::NiPoint3(0, 0, -1).UnitCross(dir);
-			if (right_dir.SqrLength() == 0)
-				right_dir = { 1, 0, 0 };
-			RE::NiPoint3 up_dir = right_dir.Cross(dir);
-
-			uint32_t count = 40;
-			RE::NiPoint3 last = _center + right_dir * r;
-			for (uint32_t i = 1; i < count; i++) {
-				float alpha = 2 * 3.1415926f / count * i;
-
-				auto cur_p = _center + right_dir * (cos(alpha) * r) + up_dir * (sin(alpha) * r);
-
-				draw_line<Color>(last, cur_p, size, time);
-				last = cur_p;
-			}
-			draw_line<Color>(last, _center + right_dir * r, size, time);
-		}
-
-		template <glm::vec4 Color = Colors::RED>
-		void draw_circle0(const RE::NiPoint3& _center, float r, const RE::NiPoint3& dir, float size = 5.0f)
-		{
-			draw_circle<Color>(_center, r, dir, size, 0);
-		}
-
-		template <glm::vec4 Color = Colors::RED>
-		void draw_sphere_many(const RE::NiPoint3& _center, float r = 5.0f, float size = 5.0f, int time = 3000)
-		{
-			glm::vec3 center(_center.x, _center.y, _center.z);
-			const int N = 10;
-			for (int i = 0; i < N; ++i) {
-				DebugAPI::DrawCircle(center, r, glm::vec3(i * 3.1415 / N, 0.0f, 0.0f), time, Color, size);
-			}
-		}
+		void draw_shape(RE::CombatMathUtilities::MovingSphere s, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			bool drawOnTop = false);
+		void draw_shape0(RE::CombatMathUtilities::MovingSphere s, glm::vec4 color = Colors::RED, bool drawOnTop = false);
 	}
 }
-using namespace DebugAPI_IMPL::DrawDebug;
+using namespace DebugRender::DrawDebug;
+
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui.h"
+#include "imgui_impl_dx11.h"
+#include "imgui_impl_win32.h"
+#include <dxgi.h>
+
+namespace ImguiUtils
+{
+	template <void (*process)(const RE::ButtonEvent*), void (*show)(), bool (*skipevents)()>
+	class ImGuiHooks
+	{
+	public:
+		static void Initialize()
+		{
+			init_impl();
+			Hook();
+		}
+
+	private:
+		static void Hook()
+		{
+			const REL::Relocation<uintptr_t> inputHook{ REL::ID(67315) };
+			const REL::Relocation<uintptr_t> registerWindowHook{ REL::ID(75591) };
+
+			auto& trampoline = SKSE::GetTrampoline();
+
+			_DispatchInputEvent = SKSE::GetTrampoline().write_call<5>(REL::ID(67315).address() + 0x7B, DispatchInputEvent);
+			_Present = trampoline.write_call<5>(REL::ID(75461).address() + 0x9, Present);
+		}
+
+		static void init_impl()
+		{
+			const auto renderManager = RE::BSGraphics::Renderer::GetSingleton();
+
+			const auto device = renderManager->data.forwarder;
+			const auto context = renderManager->data.context;
+			const auto swapChain = renderManager->data.renderWindows[0].swapChain;
+
+			DXGI_SWAP_CHAIN_DESC sd{};
+			swapChain->GetDesc(&sd);
+
+			ImGui::CreateContext();
+
+			auto& io = ImGui::GetIO();
+			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+			io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\arial.ttf", 14, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+
+			ImGui_ImplWin32_Init(sd.OutputWindow);
+			ImGui_ImplDX11_Init(device, context);
+
+			ImGui::StyleColorsDark();
+
+			WndProcHook__func = reinterpret_cast<WNDPROC>(
+				SetWindowLongPtrA(sd.OutputWindow, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(WndProcHook__thunk)));
+		}
+
+		static void new_frame()
+		{
+			ImGui_ImplWin32_NewFrame();
+			ImGui_ImplDX11_NewFrame();
+			ImGui::NewFrame();
+
+			show();
+
+			ImGui::Render();
+			ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+		}
+
+#define IM_VK_KEYPAD_ENTER (VK_RETURN + 256)
+		static ImGuiKey ImGui_ImplWin32_VirtualKeyToImGuiKey(WPARAM wParam)
+		{
+			switch (wParam) {
+			case VK_TAB:
+				return ImGuiKey_Tab;
+			case VK_LEFT:
+				return ImGuiKey_LeftArrow;
+			case VK_RIGHT:
+				return ImGuiKey_RightArrow;
+			case VK_UP:
+				return ImGuiKey_UpArrow;
+			case VK_DOWN:
+				return ImGuiKey_DownArrow;
+			case VK_PRIOR:
+				return ImGuiKey_PageUp;
+			case VK_NEXT:
+				return ImGuiKey_PageDown;
+			case VK_HOME:
+				return ImGuiKey_Home;
+			case VK_END:
+				return ImGuiKey_End;
+			case VK_INSERT:
+				return ImGuiKey_Insert;
+			case VK_DELETE:
+				return ImGuiKey_Delete;
+			case VK_BACK:
+				return ImGuiKey_Backspace;
+			case VK_SPACE:
+				return ImGuiKey_Space;
+			case VK_RETURN:
+				return ImGuiKey_Enter;
+			case VK_ESCAPE:
+				return ImGuiKey_Escape;
+			case VK_OEM_7:
+				return ImGuiKey_Apostrophe;
+			case VK_OEM_COMMA:
+				return ImGuiKey_Comma;
+			case VK_OEM_MINUS:
+				return ImGuiKey_Minus;
+			case VK_OEM_PERIOD:
+				return ImGuiKey_Period;
+			case VK_OEM_2:
+				return ImGuiKey_Slash;
+			case VK_OEM_1:
+				return ImGuiKey_Semicolon;
+			case VK_OEM_PLUS:
+				return ImGuiKey_Equal;
+			case VK_OEM_4:
+				return ImGuiKey_LeftBracket;
+			case VK_OEM_5:
+				return ImGuiKey_Backslash;
+			case VK_OEM_6:
+				return ImGuiKey_RightBracket;
+			case VK_OEM_3:
+				return ImGuiKey_GraveAccent;
+			case VK_CAPITAL:
+				return ImGuiKey_CapsLock;
+			case VK_SCROLL:
+				return ImGuiKey_ScrollLock;
+			case VK_NUMLOCK:
+				return ImGuiKey_NumLock;
+			case VK_SNAPSHOT:
+				return ImGuiKey_PrintScreen;
+			case VK_PAUSE:
+				return ImGuiKey_Pause;
+			case VK_NUMPAD0:
+				return ImGuiKey_Keypad0;
+			case VK_NUMPAD1:
+				return ImGuiKey_Keypad1;
+			case VK_NUMPAD2:
+				return ImGuiKey_Keypad2;
+			case VK_NUMPAD3:
+				return ImGuiKey_Keypad3;
+			case VK_NUMPAD4:
+				return ImGuiKey_Keypad4;
+			case VK_NUMPAD5:
+				return ImGuiKey_Keypad5;
+			case VK_NUMPAD6:
+				return ImGuiKey_Keypad6;
+			case VK_NUMPAD7:
+				return ImGuiKey_Keypad7;
+			case VK_NUMPAD8:
+				return ImGuiKey_Keypad8;
+			case VK_NUMPAD9:
+				return ImGuiKey_Keypad9;
+			case VK_DECIMAL:
+				return ImGuiKey_KeypadDecimal;
+			case VK_DIVIDE:
+				return ImGuiKey_KeypadDivide;
+			case VK_MULTIPLY:
+				return ImGuiKey_KeypadMultiply;
+			case VK_SUBTRACT:
+				return ImGuiKey_KeypadSubtract;
+			case VK_ADD:
+				return ImGuiKey_KeypadAdd;
+			case IM_VK_KEYPAD_ENTER:
+				return ImGuiKey_KeypadEnter;
+			case VK_LSHIFT:
+				return ImGuiKey_LeftShift;
+			case VK_LCONTROL:
+				return ImGuiKey_LeftCtrl;
+			case VK_LMENU:
+				return ImGuiKey_LeftAlt;
+			case VK_LWIN:
+				return ImGuiKey_LeftSuper;
+			case VK_RSHIFT:
+				return ImGuiKey_RightShift;
+			case VK_RCONTROL:
+				return ImGuiKey_RightCtrl;
+			case VK_RMENU:
+				return ImGuiKey_RightAlt;
+			case VK_RWIN:
+				return ImGuiKey_RightSuper;
+			case VK_APPS:
+				return ImGuiKey_Menu;
+			case '0':
+				return ImGuiKey_0;
+			case '1':
+				return ImGuiKey_1;
+			case '2':
+				return ImGuiKey_2;
+			case '3':
+				return ImGuiKey_3;
+			case '4':
+				return ImGuiKey_4;
+			case '5':
+				return ImGuiKey_5;
+			case '6':
+				return ImGuiKey_6;
+			case '7':
+				return ImGuiKey_7;
+			case '8':
+				return ImGuiKey_8;
+			case '9':
+				return ImGuiKey_9;
+			case 'A':
+				return ImGuiKey_A;
+			case 'B':
+				return ImGuiKey_B;
+			case 'C':
+				return ImGuiKey_C;
+			case 'D':
+				return ImGuiKey_D;
+			case 'E':
+				return ImGuiKey_E;
+			case 'F':
+				return ImGuiKey_F;
+			case 'G':
+				return ImGuiKey_G;
+			case 'H':
+				return ImGuiKey_H;
+			case 'I':
+				return ImGuiKey_I;
+			case 'J':
+				return ImGuiKey_J;
+			case 'K':
+				return ImGuiKey_K;
+			case 'L':
+				return ImGuiKey_L;
+			case 'M':
+				return ImGuiKey_M;
+			case 'N':
+				return ImGuiKey_N;
+			case 'O':
+				return ImGuiKey_O;
+			case 'P':
+				return ImGuiKey_P;
+			case 'Q':
+				return ImGuiKey_Q;
+			case 'R':
+				return ImGuiKey_R;
+			case 'S':
+				return ImGuiKey_S;
+			case 'T':
+				return ImGuiKey_T;
+			case 'U':
+				return ImGuiKey_U;
+			case 'V':
+				return ImGuiKey_V;
+			case 'W':
+				return ImGuiKey_W;
+			case 'X':
+				return ImGuiKey_X;
+			case 'Y':
+				return ImGuiKey_Y;
+			case 'Z':
+				return ImGuiKey_Z;
+			case VK_F1:
+				return ImGuiKey_F1;
+			case VK_F2:
+				return ImGuiKey_F2;
+			case VK_F3:
+				return ImGuiKey_F3;
+			case VK_F4:
+				return ImGuiKey_F4;
+			case VK_F5:
+				return ImGuiKey_F5;
+			case VK_F6:
+				return ImGuiKey_F6;
+			case VK_F7:
+				return ImGuiKey_F7;
+			case VK_F8:
+				return ImGuiKey_F8;
+			case VK_F9:
+				return ImGuiKey_F9;
+			case VK_F10:
+				return ImGuiKey_F10;
+			case VK_F11:
+				return ImGuiKey_F11;
+			case VK_F12:
+				return ImGuiKey_F12;
+			default:
+				return ImGuiKey_None;
+			}
+		}
+
+		class CharEvent : public RE::InputEvent
+		{
+		public:
+			uint32_t keyCode;  // 18 (ascii code)
+		};
+
+		static void ProcessEvent(RE::InputEvent** a_event)
+		{
+			if (!a_event)
+				return;
+
+			auto& io = ImGui::GetIO();
+
+			for (auto event = *a_event; event; event = event->next) {
+				if (event->eventType == RE::INPUT_EVENT_TYPE::kChar) {
+					io.AddInputCharacter(static_cast<CharEvent*>(event)->keyCode);
+				} else if (event->eventType == RE::INPUT_EVENT_TYPE::kButton) {
+					const auto button = static_cast<RE::ButtonEvent*>(event);
+					if (!button || (button->IsPressed() && !button->IsDown()))
+						continue;
+
+					auto scan_code = button->GetIDCode();
+
+					using DeviceType = RE::INPUT_DEVICE;
+					auto input = scan_code;
+					switch (button->device.get()) {
+					case DeviceType::kMouse:
+						input += 256;
+						break;
+					case DeviceType::kKeyboard:
+						break;
+					default:
+						continue;
+					}
+
+					using DIKey = RE::DirectInput8::DIKey;
+					uint32_t key = MapVirtualKeyEx(scan_code, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0));
+					switch (scan_code) {
+					case DIKey::DIK_LEFTARROW:
+						key = VK_LEFT;
+						break;
+					case DIKey::DIK_RIGHTARROW:
+						key = VK_RIGHT;
+						break;
+					case DIKey::DIK_UPARROW:
+						key = VK_UP;
+						break;
+					case DIKey::DIK_DOWNARROW:
+						key = VK_DOWN;
+						break;
+					case DIKey::DIK_DELETE:
+						key = VK_DELETE;
+						break;
+					case DIKey::DIK_END:
+						key = VK_END;
+						break;
+					case DIKey::DIK_HOME:
+						key = VK_HOME;
+						break;  // pos1
+					case DIKey::DIK_PRIOR:
+						key = VK_PRIOR;
+						break;  // page up
+					case DIKey::DIK_NEXT:
+						key = VK_NEXT;
+						break;  // page down
+					case DIKey::DIK_INSERT:
+						key = VK_INSERT;
+						break;
+					case DIKey::DIK_NUMPAD0:
+						key = VK_NUMPAD0;
+						break;
+					case DIKey::DIK_NUMPAD1:
+						key = VK_NUMPAD1;
+						break;
+					case DIKey::DIK_NUMPAD2:
+						key = VK_NUMPAD2;
+						break;
+					case DIKey::DIK_NUMPAD3:
+						key = VK_NUMPAD3;
+						break;
+					case DIKey::DIK_NUMPAD4:
+						key = VK_NUMPAD4;
+						break;
+					case DIKey::DIK_NUMPAD5:
+						key = VK_NUMPAD5;
+						break;
+					case DIKey::DIK_NUMPAD6:
+						key = VK_NUMPAD6;
+						break;
+					case DIKey::DIK_NUMPAD7:
+						key = VK_NUMPAD7;
+						break;
+					case DIKey::DIK_NUMPAD8:
+						key = VK_NUMPAD8;
+						break;
+					case DIKey::DIK_NUMPAD9:
+						key = VK_NUMPAD9;
+						break;
+					case DIKey::DIK_DECIMAL:
+						key = VK_DECIMAL;
+						break;
+					case DIKey::DIK_NUMPADENTER:
+						key = IM_VK_KEYPAD_ENTER;
+						break;
+					case DIKey::DIK_RMENU:
+						key = VK_RMENU;
+						break;  // right alt
+					case DIKey::DIK_RCONTROL:
+						key = VK_RCONTROL;
+						break;  // right control
+					case DIKey::DIK_LWIN:
+						key = VK_LWIN;
+						break;  // left win
+					case DIKey::DIK_RWIN:
+						key = VK_RWIN;
+						break;  // right win
+					case DIKey::DIK_APPS:
+						key = VK_APPS;
+						break;
+					default:
+						break;
+					}
+
+					switch (button->device.get()) {
+					case RE::INPUT_DEVICE::kMouse:
+						if (scan_code > 7)  // middle scroll
+							io.AddMouseWheelEvent(0, button->Value() * (scan_code == 8 ? 1 : -1));
+						else {
+							if (scan_code > 5)
+								scan_code = 5;
+							io.AddMouseButtonEvent(scan_code, button->IsPressed());
+						}
+						break;
+					case RE::INPUT_DEVICE::kKeyboard:
+						io.AddKeyEvent(ImGui_ImplWin32_VirtualKeyToImGuiKey(key), button->IsPressed());
+						break;
+					default:
+						continue;
+					}
+				}
+			}
+		}
+
+		static void DispatchInputEvent(RE::BSTEventSource<RE::InputEvent*>* a_dispatcher, RE::InputEvent** a_evns)
+		{
+			if (!a_evns) {
+				return _DispatchInputEvent(a_dispatcher, a_evns);
+			}
+
+			for (auto e = *a_evns; e; e = e->next) {
+				if (e->eventType == RE::INPUT_EVENT_TYPE::kButton) {
+					const auto button = static_cast<RE::ButtonEvent*>(e);
+					process(button);
+				}
+			}
+
+			if (skipevents()) {
+				static RE::InputEvent* dummy = nullptr;
+				ProcessEvent(a_evns);
+				return _DispatchInputEvent(a_dispatcher, &dummy);
+			} else {
+				return _DispatchInputEvent(a_dispatcher, a_evns);
+			}
+		}
+
+		static LRESULT WndProcHook__thunk(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+		{
+			auto& io = ImGui::GetIO();
+			if (uMsg == WM_KILLFOCUS) {
+				io.ClearInputCharacters();
+				io.ClearInputKeys();
+			}
+
+			return WndProcHook__func(hWnd, uMsg, wParam, lParam);
+		}
+
+		static void Present(uint32_t a1)
+		{
+			_Present(a1);
+
+			new_frame();
+		}
+
+		static inline WNDPROC WndProcHook__func;
+		static inline REL::Relocation<decltype(Present)> _Present;
+		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
+	};
+}
 
 namespace FenixUtils
 {
@@ -385,16 +723,24 @@ namespace FenixUtils
 		// ^^^ getting values ^^^
 	}
 
+	namespace Timer
+	{
+		float get_time();
+		bool passed(float timestamp, float interval);
+		bool passed(RE::AITimer& timer);
+		void updateAndWait(RE::AITimer& timer, float interval);
+	}
+
 	float Projectile__GetSpeed(RE::Projectile* proj);
 	void Projectile__set_collision_layer(RE::Projectile* proj, RE::COL_LAYER collayer);
 
 	void TESObjectREFR__SetAngleOnReferenceX(RE::TESObjectREFR* refr, float angle_x);
 	void TESObjectREFR__SetAngleOnReferenceZ(RE::TESObjectREFR* refr, float angle_z);
 
-
 	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a);
 	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem);
 
+	void damage_stamina_withdelay(RE::Actor* a, float val);
 	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
 	void damageav(RE::Actor* a, RE::ActorValue av, float val);
 	RE::TESObjectWEAP* get_UnarmedWeap();
@@ -553,7 +899,7 @@ constexpr uint32_t operator"" _hl(const char* str, size_t size) noexcept
 #include "SimpleIni.h"
 class SettingsBase
 {
-public:
+protected:
 	static bool ReadBool(const CSimpleIniA& ini, const char* section, const char* setting, bool& ans)
 	{
 		if (ini.GetValue(section, setting)) {
