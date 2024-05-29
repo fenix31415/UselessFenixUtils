@@ -2178,6 +2178,64 @@ namespace FenixUtils
 		}
 	}
 
+	namespace Behavior
+	{
+		RE::hkbNode* lookup_node(RE::hkbBehaviorGraph* root_graph, const char* name)
+		{
+			RE::BShkbUtils::GraphTraverser traverser(6, root_graph);
+			for (auto node = traverser.Next(); node; node = traverser.Next()) {
+				if (node->name.c_str() && !std::strcmp(node->name.c_str(), name))
+					return node;
+			}
+			return nullptr;
+		}
+
+		int32_t get_implicit_id_variable(RE::hkbBehaviorGraph* graph, const char* name)
+		{
+			const auto& names = graph->data->stringData->variableNames;
+			for (int32_t i = 0; i < names.size(); i++) {
+				if (!std::strcmp(names[i].c_str(), name))
+					return i;
+			}
+			return -1;
+		}
+
+		RE::hkbEventBase::SystemEventIDs get_implicit_id_event(RE::hkbBehaviorGraph* graph, const char* name)
+		{
+			const auto& names = graph->data->stringData->eventNames;
+			for (int32_t i = 0; i < names.size(); i++) {
+				if (!std::strcmp(names[i].c_str(), name))
+					return static_cast<RE::hkbEventBase::SystemEventIDs>(i);
+			}
+			return RE::hkbEventBase::SystemEventIDs::kNull;
+		}
+
+		const char* get_event_name_implicit(RE::hkbBehaviorGraph* graph, RE::hkbEventBase::SystemEventIDs implicit_id)
+		{
+			if (implicit_id == RE::hkbEventBase::SystemEventIDs::kNull)
+				return nullptr;
+
+			return graph->data->stringData->eventNames[static_cast<uint32_t>(implicit_id)].c_str();
+		}
+
+		const char* get_event_name_explicit(RE::hkbBehaviorGraph* graph, int32_t explicit_id)
+		{
+			if (auto map = graph->eventIDMap.get()) {
+				auto implicit_id = map->map.getWithDefault(static_cast<int64_t>(explicit_id) + 1, -1);
+				if (implicit_id != -1) {
+					return get_event_name_implicit(graph, static_cast<RE::hkbEventBase::SystemEventIDs>(implicit_id));
+				}
+			}
+
+			return nullptr;
+		}
+
+		const char* get_variable_name(RE::hkbBehaviorGraph* graph, int32_t ind)
+		{
+			return graph->data->stringData->variableNames[static_cast<uint32_t>(ind)].c_str();
+		}
+	}
+
 	float Projectile__GetSpeed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(Projectile__GetSpeed)>::eval(proj); }
 
 	void Projectile__set_collision_layer(RE::Projectile* proj, RE::COL_LAYER collayer)
