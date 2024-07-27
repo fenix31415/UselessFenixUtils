@@ -79,10 +79,20 @@ find_package(magic_enum CONFIG REQUIRED)
 set(SOURCES
 	src/PCH.h
   include/UselessFenixUtils.h
-  src/Utils.cpp
-  src/Utils1.cpp
-  include/Utils1.h
+  src/UselessFenixUtils.cpp
 )
+
+if (WITH_IMGUI)
+	list(APPEND SOURCES
+		include/UselessImguiUtils.h
+	)
+endif ()
+if (WITH_DRAWING)
+	list(APPEND SOURCES
+		include/UselessDebugRenderUtils.h
+		src/DebugRenderUtils.cpp
+	)
+endif ()
 
 source_group(
 	TREE

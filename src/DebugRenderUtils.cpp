@@ -1,11 +1,7 @@
-#include <UselessFenixUtils.h>
-
 #include <d3dcompiler.h>
 #include <timeapi.h>
-#include <windows.h>
 #pragma comment(lib, "winmm.lib")
 
-#pragma warning(disable: 4189)
 #include <d3d11.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -13,11 +9,14 @@
 #pragma comment(lib, "D3D11.lib")
 #pragma comment(lib, "d3dcompiler.lib")
 
-#pragma warning(disable: 4244 4267)
+#pragma warning(push)
+#pragma warning(disable: 4267)  // conversion from 'size_t' to 'type', possible loss of data
+#pragma warning(disable: 4244)  // conversion from 'type1' to 'type2', possible loss of data
 
-#include "Utils1.h"
+static uintptr_t g_worldToCamMatrix = RELOCATION_ID(519579, 406126).address();  // 2F4C910, 2FE75F0
+static RE::NiRect<float>* g_viewPort = (RE::NiRect<float>*)RELOCATION_ID(519618, 406160).address();  // 2F4DED0, 2FE8B98
 
-namespace DebugRender
+namespace DebugRenderUtils
 {
 	class ITimer
 	{
@@ -218,11 +217,11 @@ namespace DebugRender
 	} D3DContext;
 
 	static D3DContext gameContext;
-	
+
 	using DrawFunc = std::function<void(D3DContext&)>;
 	static std::vector<DrawFunc> presentCallbacks;
 	static bool initialized = false;
-	
+
 	// Ideally you would do something a bit more clever, but with what little rendering we do storing a lazy cache like this is fine
 	// Depth
 	typedef struct DSStateKey
@@ -283,7 +282,7 @@ namespace DebugRender
 	{
 		size_t operator()(const DSStateKey& k1, const DSStateKey& k2) const { return k1 == k2; }
 	};
-	
+
 	// Fixed function blending
 	typedef struct BlendStateKey
 	{
@@ -355,7 +354,7 @@ namespace DebugRender
 			loc.state.detach();
 		}
 	} BlendState;
-	
+
 	// Rasterizer
 	typedef struct RasterStateKey
 	{
@@ -423,11 +422,9 @@ namespace DebugRender
 
 		std::unordered_map<DSStateKey, DSState, DSHasher, DSCompare> loadedDepthStates;
 
-		std::unordered_map<BlendStateKey, BlendState, BlendStateHasher, BlendStateCompare>
-			loadedBlendStates;
+		std::unordered_map<BlendStateKey, BlendState, BlendStateHasher, BlendStateCompare> loadedBlendStates;
 
-		std::unordered_map<RasterStateKey, RasterState, RasterStateHasher, RasterStateCompare>
-			loadedRasterStates;
+		std::unordered_map<RasterStateKey, RasterState, RasterStateHasher, RasterStateCompare> loadedRasterStates;
 
 		void release()
 		{
@@ -442,7 +439,7 @@ namespace DebugRender
 
 	// The present hook
 	typedef HRESULT (*D3D11Present)(IDXGISwapChain*, UINT, UINT);
-	
+
 	static bool ReadSwapChain()
 	{
 		// Hopefully SEH will shield us from unexpected crashes with other mods/programs
@@ -532,15 +529,8 @@ namespace DebugRender
 	// Install D3D hooks
 	void InstallHooks()
 	{
-		if (!ReadSwapChain()) {
-			logger::error("SmoothCam: Failed to hook IDXGISwapChain::Present and aquire device context, drawing is disabled.");
-			return;
-		}
-
-		if (!SUCCEEDED(gameContext.swapChain->GetDevice(__uuidof(ID3D11Device), gameContext.device.put_void()))) {
-			logger::error("SmoothCam: Failed to get rendering device.");
-			return;
-		}
+		ReadSwapChain();
+		gameContext.swapChain->GetDevice(__uuidof(ID3D11Device), gameContext.device.put_void());
 
 		REL::Relocation<std::uintptr_t> D3DVtbl{ *(uintptr_t*)gameContext.swapChain };
 		fnPresentOrig = D3DVtbl.write_vfunc(0x8, Present);
@@ -549,33 +539,11 @@ namespace DebugRender
 		initialized = true;
 	}
 
-	// Shutdown, release references
-	void Shutdown()
-	{
-		if (!initialized)
-			return;
-		initialized = false;
-
-		// Release program lifetime objects
-		d3dObjects.release();
-
-		// Free our present hook
-		//d3dHook->unHook();
-
-		// Explicit release
-		gameContext.context = nullptr;
-		gameContext.device = nullptr;
-	}
-
 	// Get the game's D3D context
 	D3DContext& GetContext() noexcept { return gameContext; }
 
 	// Returns true if we have a valid D3D context
 	bool HasContext() noexcept { return initialized; }
-	// Get the game's depth-stencil view for the back buffer
-	winrt::com_ptr<ID3D11DepthStencilView>& GetDepthStencilView() noexcept { return d3dObjects.depthStencilView; }
-	// Get the game's render target for the back buffer
-	winrt::com_ptr<ID3D11RenderTargetView>& GetGameRT() noexcept { return d3dObjects.gameRTV; }
 
 	// Add a new function for drawing during the present hook
 	void OnPresent(DrawFunc&& callback) { presentCallbacks.emplace_back(callback); }
@@ -623,35 +591,6 @@ namespace DebugRender
 		ctx.context->OMSetBlendState(state.state.get(), key.factors, 0xffffffff);
 
 		d3dObjects.loadedBlendStates.emplace(key, std::move(state));
-	}
-
-	// Set the raster state
-	void SetRasterState(D3DContext& ctx, D3D11_FILL_MODE fillMode, D3D11_CULL_MODE cullMode, bool frontCCW, int32_t depthBias = 0,
-		float depthBiasClamp = 0.0f, float slopeScaledDepthBias = 0.0f, bool lineAA = true, bool depthClip = false,
-		bool scissorEnable = false, bool msaa = false)
-	{
-		D3D11_RASTERIZER_DESC desc;
-		desc.FillMode = fillMode;
-		desc.CullMode = cullMode;
-		desc.FrontCounterClockwise = frontCCW;
-		desc.DepthBias = depthBias;
-		desc.DepthBiasClamp = depthBiasClamp;
-		desc.SlopeScaledDepthBias = slopeScaledDepthBias;
-		desc.DepthClipEnable = depthClip;
-		desc.ScissorEnable = scissorEnable;
-		desc.MultisampleEnable = msaa;
-		desc.AntialiasedLineEnable = lineAA;
-		auto key = RasterStateKey{ desc };
-
-		auto it = d3dObjects.loadedRasterStates.find(key);
-		if (it != d3dObjects.loadedRasterStates.end()) {
-			ctx.context->RSSetState(it->second.state.get());
-			return;
-		}
-
-		auto state = RasterState{ ctx, key };
-		ctx.context->RSSetState(state.state.get());
-		d3dObjects.loadedRasterStates.emplace(key, std::move(state));
 	}
 
 	class Shader
@@ -998,29 +937,8 @@ PS_OUTPUT main(PS_INPUT input) {
 			};
 	} Line;
 
-	typedef struct Collider
-	{
-		RE::NiPointer<RE::NiAVObject> node;
-		float duration;
-		double timestamp;
-		glm::vec4 color;
-		Collider(RE::NiPointer<RE::NiAVObject> node, double& timestamp, float& duration, glm::vec4& color) :
-			node(node), timestamp(timestamp), duration(duration), color(color){};
-
-		[[nodiscard]] friend bool operator==(const Collider& a_lhs, const Collider& a_rhs) noexcept
-		{
-			return a_lhs.node == a_rhs.node;
-		}
-
-		[[nodiscard]] friend bool operator==(const Collider& a_this, const RE::NiPointer<RE::NiAVObject> a_node) noexcept
-		{
-			return a_this.node == a_node;
-		}
-	} Collider;
-
 	using LineList = std::vector<Line>;
 	using PointList = std::vector<DrawnPoint>;
-	using ColliderList = std::vector<Collider>;
 
 	// Number of points we can submit in a single draw call
 	constexpr size_t LineDrawPointBatchSize = 64;
@@ -1137,9 +1055,6 @@ PS_OUTPUT main(PS_INPUT input) {
 		}
 	};
 
-	void DrawCollider(RE::NiAVObject* a_node, [[maybe_unused]] float a_duration, [[maybe_unused]] glm::vec4 a_color);
-	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color, bool a_bCheckJumpIframes /*= false*/);
-
 	class DrawHandler
 	{
 	public:
@@ -1151,7 +1066,6 @@ PS_OUTPUT main(PS_INPUT input) {
 
 		void Update(float a_delta)
 		{
-			//GameTime::StepFrameTime();
 			if (RE::UI::GetSingleton()->GameIsPaused()) {
 				return;
 			}
@@ -1160,33 +1074,6 @@ PS_OUTPUT main(PS_INPUT input) {
 		}
 		void Render(D3DContext& ctx)
 		{
-			//auto playerCamera = RE::PlayerCamera::GetSingleton();
-			//auto currentCameraState = playerCamera->currentState;
-			//if (!currentCameraState) {
-			//	return;
-			//}
-
-			//
-
-			//RE::NiPoint3 currentCameraPosition;
-			//currentCameraState->GetTranslation(currentCameraPosition);
-			//glm::vec3 cameraPosition(currentCameraPosition.x, currentCameraPosition.y, currentCameraPosition.z);
-
-			//RE::NiQuaternion niq;
-			//currentCameraState->GetRotation(niq);
-			//glm::quat q {niq.w, niq.x, niq.y, niq.z};
-			//glm::vec2 cameraRotation;
-			//cameraRotation.x = glm::pitch(q) * -1.0f;
-			//cameraRotation.y = glm::roll(q) * -1.0f;  // The game stores yaw in the Z axis
-
-			//RE::NiPointer<RE::NiCamera> niCamera = RE::NiPointer<RE::NiCamera>(static_cast<RE::NiCamera*>(playerCamera->cameraRoot->children[0].get()));
-
-			//const auto matProj = Render::GetProjectionMatrix(niCamera->viewFrustum);
-			//const auto matView = Render::BuildViewMatrix(cameraPosition, cameraRotation);
-			//const auto matWorldToCam = *reinterpret_cast<glm::mat4*>(g_worldToCamMatrix);
-
-			//renderables.cbufPerFrameStaging.matProjView = matProj * matView;
-
 			Locker locker(_lock);
 
 			renderables.cbufPerFrameStaging.curTime = static_cast<float>(GameTime::CurTime());
@@ -1214,33 +1101,18 @@ PS_OUTPUT main(PS_INPUT input) {
 				renderables.lineDrawer->Submit(renderables.drawOnTopLineSegments);
 			}
 
-			//renderables.colliders.erase(std::remove_if(renderables.colliders.begin(), renderables.colliders.end(), [this](Render::Collider collider) { return collider.timestamp + collider.duration < _timer; }), renderables.colliders.end());
-			std::erase_if(renderables.colliders, [this](Collider collider) {
-				return collider.duration > 0 && collider.timestamp + collider.duration < _timer;
-			});
-			DrawDebugCapsules();
-
 			std::erase_if(renderables.points,
 				[this](DrawnPoint point) { return point.duration > 0 && point.timestamp + point.duration < _timer; });
 			std::erase_if(renderables.drawOnTopPoints,
 				[this](DrawnPoint point) { return point.duration > 0 && point.timestamp + point.duration < _timer; });
+			
 			DrawPoints();
 
-			// remove expired lines
-			//renderables.lineSegments.erase(std::remove_if(renderables.lineSegments.begin(), renderables.lineSegments.end(), [this](Render::Line line) { return line.timestamp + line.duration < _timer; }), renderables.lineSegments.end());
-			std::erase_if(renderables.lineSegments,
-				[this](Line line) { return line.timestamp + line.duration < _timer; });
-			//renderables.drawOnTopLineSegments.erase(std::remove_if(renderables.drawOnTopLineSegments.begin(), renderables.drawOnTopLineSegments.end(), [this](Render::Line line) { return line.timestamp + line.duration < _timer; }), renderables.drawOnTopLineSegments.end());
+			std::erase_if(renderables.lineSegments, [this](Line line) { return line.timestamp + line.duration < _timer; });
 			std::erase_if(renderables.drawOnTopLineSegments,
 				[this](Line line) { return line.timestamp + line.duration < _timer; });
 		}
 
-		void DrawDebugCapsules()
-		{
-			for (auto& collider : renderables.colliders) {
-				DrawCollider(collider.node.get(), 0.f, collider.color);
-			}
-		}
 		void DrawPoints()
 		{
 			for (auto& point : renderables.points) {
@@ -1252,43 +1124,12 @@ PS_OUTPUT main(PS_INPUT input) {
 			}
 		}
 
-		static bool isLineClose(const Line& line, DebugRender::LineList& a)
-		{
-			for (auto& l : a) {
-				if (l.start.col == line.start.col && l.end.col == line.end.col) {
-					const float eps = 10.0f;
-					if (glm::length(line.start.pos - l.start.pos) < eps && glm::length(line.end.pos - l.end.pos) < eps) {
-						l = line;
-						return true;
-					}
-				}
-			}
-			return false;
-		}
-
 		static void DrawDebugLine(const RE::NiPoint3& a_start, const RE::NiPoint3& a_end, float a_duration, glm::vec4 a_color,
 			bool a_drawOnTop = false)
 		{
 			glm::vec3 start{ a_start.x, a_start.y, a_start.z };
 			glm::vec3 end{ a_end.x, a_end.y, a_end.z };
 			double timestamp = DrawHandler::GetTime();
-
-			//RE::NiCamera::WorldPtToScreenPt3((float(*)[4])g_worldToCamMatrix, *g_viewPort, a_start, start.x, start.y, start.z,
-			//	1e-5f);
-			//start -= 0.5f;
-			//start *= 2.f;
-			//
-			//if (start.z < 0) {
-			//	return;
-			//}
-
-			//RE::NiCamera::WorldPtToScreenPt3((float(*)[4])g_worldToCamMatrix, *g_viewPort, a_end, end.x, end.y, end.z, 1e-5f);
-			//end -= 0.5f;
-			//end *= 2.f;
-			//
-			//if (end.z < 0) {
-			//	return;
-			//}
 
 			Line line(Point(start, a_color), Point(end, a_color), timestamp, a_duration);
 
@@ -1297,31 +1138,18 @@ PS_OUTPUT main(PS_INPUT input) {
 			Locker locker(drawHandler->_lock);
 
 			auto& list = a_drawOnTop ? drawHandler->renderables.drawOnTopLineSegments : drawHandler->renderables.lineSegments;
-			//if (!isLineClose(line, list)) {
-				list.emplace_back(line);
-			//}
+			list.emplace_back(line);
 		}
 		static void DrawDebugPoint(const RE::NiPoint3& a_position, float a_duration, glm::vec4 a_color, bool a_drawOnTop = false)
 		{
 			glm::vec3 position{ a_position.x, a_position.y, a_position.z };
 			double timestamp = DrawHandler::GetTime();
 
-			//RE::NiCamera::WorldPtToScreenPt3((float(*)[4])g_worldToCamMatrix, *g_viewPort, a_position, position.x, position.y,
-			//	position.z, 1e-5f);
-			//position -= 0.5f;
-			//position *= 2.f;
-			//
-			//if (position.z < 0) {
-			//	return;
-			//}
-
 			const glm::vec3 offset1{ 2, 2, 0.f };
 			const glm::vec3 offset2{ 2, -2, 0.f };
 
-			Line line1(Point(position - offset1, a_color), Point(position + offset1, a_color), timestamp,
-				a_duration);
-			Line line2(Point(position - offset2, a_color), Point(position + offset2, a_color), timestamp,
-				a_duration);
+			Line line1(Point(position - offset1, a_color), Point(position + offset1, a_color), timestamp, a_duration);
+			Line line2(Point(position - offset2, a_color), Point(position + offset2, a_color), timestamp, a_duration);
 
 			auto drawHandler = DrawHandler::GetSingleton();
 
@@ -1426,80 +1254,6 @@ PS_OUTPUT main(PS_INPUT input) {
 			DrawCircle(a_center, yAxis, zAxis, a_radius, collisionSides, a_duration, a_color, a_drawOnTop);
 		}
 
-		static void DrawSweptCapsule(const RE::NiPoint3& a_a, const RE::NiPoint3& a_b, const RE::NiPoint3& a_c,
-			const RE::NiPoint3& a_d, float, const RE::NiMatrix3&, float a_duration, glm::vec4 a_color,
-			bool a_drawOnTop = false)
-		{
-			DrawDebugLine(a_a, a_b, a_duration, a_color, a_drawOnTop);
-			DrawDebugLine(a_b, a_c, a_duration, a_color, a_drawOnTop);
-			DrawDebugLine(a_c, a_d, a_duration, a_color, a_drawOnTop);
-			DrawDebugLine(a_d, a_a, a_duration, a_color, a_drawOnTop);
-
-			//constexpr int32_t collisionSides = 16;
-
-			//RE::NiPoint3 x{ 1.f, 0.f, 0.f };
-			//RE::NiPoint3 y{ 0.f, 1.f, 0.f };
-			//RE::NiPoint3 z{ 0.f, 0.f, 1.f };
-			//x = Utils::TransformVectorByMatrix(x, a_rotation);
-			//y = Utils::TransformVectorByMatrix(y, a_rotation);
-			//z = Utils::TransformVectorByMatrix(z, a_rotation);
-
-			//// top
-			//DrawDebugLine(a_a + z * a_radius, a_b + z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_b + z * a_radius, a_c + z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_c + z * a_radius, a_d + z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_d + z * a_radius, a_a + z * a_radius, a_duration, a_color, true);
-
-			//// bottom
-			//DrawDebugLine(a_a - z * a_radius, a_b - z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_b - z * a_radius, a_c - z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_c - z * a_radius, a_d - z * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_d - z * a_radius, a_a - z * a_radius, a_duration, a_color, true);
-
-			//// sides
-			//DrawDebugLine(a_a - x * a_radius, a_b - x * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_b + y * a_radius, a_c + y * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_c + x * a_radius, a_d + x * a_radius, a_duration, a_color, true);
-			//DrawDebugLine(a_d - y * a_radius, a_a - y * a_radius, a_duration, a_color, true);
-		}
-
-		static void AddCollider(const RE::NiPointer<RE::NiAVObject> a_node, float a_duration, glm::vec4 a_color)
-		{
-			double timestamp = DrawHandler::GetTime();
-			Collider collider(a_node, timestamp, a_duration, a_color);
-			auto drawHandler = DrawHandler::GetSingleton();
-
-			Locker locker(drawHandler->_lock);
-			if (std::find(drawHandler->renderables.colliders.begin(), drawHandler->renderables.colliders.end(), collider) ==
-				drawHandler->renderables.colliders.end()) {
-				drawHandler->renderables.colliders.emplace_back(collider);
-			}
-		}
-		static void RemoveCollider(const RE::NiPointer<RE::NiAVObject> a_node)
-		{
-			auto drawHandler = DrawHandler::GetSingleton();
-
-			Locker locker(drawHandler->_lock);
-			auto it = std::find(drawHandler->renderables.colliders.begin(), drawHandler->renderables.colliders.end(), a_node);
-			if (it != drawHandler->renderables.colliders.end()) {
-				drawHandler->renderables.colliders.erase(it);
-			}
-		}
-
-		static void AddPoint(const RE::NiPoint3& a_point, float a_duration, glm::vec4 a_color, bool a_bDrawOnTop = false)
-		{
-			double timestamp = DrawHandler::GetTime();
-			DrawnPoint point(Point(glm::vec3(a_point.x, a_point.y, a_point.z), a_color), timestamp, a_duration);
-			auto drawHandler = DrawHandler::GetSingleton();
-
-			Locker locker(drawHandler->_lock);
-			if (a_bDrawOnTop) {
-				drawHandler->renderables.drawOnTopPoints.emplace_back(point);
-			} else {
-				drawHandler->renderables.points.emplace_back(point);
-			}
-		}
-
 		static double GetTime() { return DrawHandler::GetSingleton()->_timer; }
 
 		void OnPreLoadGame() { renderables.ClearLists(); }
@@ -1508,15 +1262,9 @@ PS_OUTPUT main(PS_INPUT input) {
 			// Hook only if debug display is enabled
 			if (!_bDXHooked) {
 				InstallHooks();
-				if (HasContext()) {
-					_bDXHooked = true;
-					Initialize();
-				} else {
-					logger::critical(
-						"Precision: Failed to hook DirectX, Rendering features will be disabled. Try running with overlay "
-					    "software "
-						"disabled if this warning keeps occurring.");
-				}
+				assert(HasContext());
+				_bDXHooked = true;
+				Initialize();
 			}
 		}
 
@@ -1596,7 +1344,6 @@ PS_OUTPUT main(PS_INPUT input) {
 
 			PointList points;
 			PointList drawOnTopPoints;
-			ColliderList colliders;
 
 			void ClearLists()
 			{
@@ -1604,7 +1351,6 @@ PS_OUTPUT main(PS_INPUT input) {
 				drawOnTopLineSegments.clear();
 				points.clear();
 				drawOnTopPoints.clear();
-				colliders.clear();
 			}
 
 			// D3D expects resources to be released in a certain order
@@ -1618,104 +1364,6 @@ PS_OUTPUT main(PS_INPUT input) {
 
 		double _timer = 0.0;
 	};
-
-	struct Capsule
-	{
-		RE::NiPoint3 a;
-		RE::NiPoint3 b;
-		float radius;
-	};
-	
-	bool GetCapsuleParams(RE::NiAVObject* a_node, Capsule& a_outCapsule)
-	{
-		if (a_node && a_node->collisionObject) {
-			auto collisionObject = static_cast<RE::bhkCollisionObject*>(a_node->collisionObject.get());
-			auto rigidBody = collisionObject->GetRigidBody();
-
-			if (rigidBody && rigidBody->referencedObject) {
-				RE::hkpRigidBody* hkpRigidBody = static_cast<RE::hkpRigidBody*>(rigidBody->referencedObject.get());
-				const RE::hkpShape* hkpShape = hkpRigidBody->collidable.shape;
-				if (hkpShape->type == RE::hkpShapeType::kCapsule) {
-					auto hkpCapsuleShape = static_cast<const RE::hkpCapsuleShape*>(hkpShape);
-					float bhkInvWorldScale = *g_worldScaleInverse;
-
-					a_outCapsule.radius = hkpCapsuleShape->radius * bhkInvWorldScale;
-					a_outCapsule.a = Utils::HkVectorToNiPoint(hkpCapsuleShape->vertexA) * bhkInvWorldScale;
-					a_outCapsule.b = Utils::HkVectorToNiPoint(hkpCapsuleShape->vertexB) * bhkInvWorldScale;
-
-					return true;
-				}
-			}
-		}
-
-		return false;
-	}
-
-	void DrawCollider(RE::NiAVObject* a_node, [[maybe_unused]] float a_duration, [[maybe_unused]] glm::vec4 a_color)
-	{
-		Capsule capsule;
-		if (GetCapsuleParams(a_node, capsule)) {
-			if (a_node && a_node->collisionObject) {
-				auto collisionObject = static_cast<RE::bhkCollisionObject*>(a_node->collisionObject.get());
-				auto rigidBody = collisionObject->GetRigidBody();
-				if (rigidBody && rigidBody->referencedObject) {
-					RE::hkpRigidBody* hkpRigidBody = static_cast<RE::hkpRigidBody*>(rigidBody->referencedObject.get());
-					auto& hkTransform = hkpRigidBody->motion.motionState.transform;
-					RE::NiTransform transform = Utils::HkTransformToNiTransform(hkTransform);
-
-					RE::NiPoint3 vertexA = capsule.a;
-					RE::NiPoint3 vertexB = capsule.b;
-
-					vertexA = transform * vertexA;
-					vertexB = transform * vertexB;
-
-					DrawHandler::DrawDebugCapsule(vertexA, vertexB, capsule.radius, a_duration, a_color, true);
-				}
-			}
-		}
-	}
-
-	void DrawActorColliders(RE::ActorHandle a_actorHandle, RE::NiAVObject* a_root, float a_duration, glm::vec4 a_color)
-	{
-		if (!a_actorHandle) {
-			return;
-		}
-
-		auto actor = a_actorHandle.get();
-
-		bool bIsGhost = actor->IsGhost();
-		bool bCheckJumpIframes = false;
-
-		const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
-
-		if (bIsGhost) {
-			a_color = blue;
-		}
-
-		DrawColliders(a_root, a_duration, a_color, bCheckJumpIframes);
-	}
-
-	void DrawColliders(RE::NiAVObject* a_node, float a_duration, glm::vec4 a_color, bool a_bCheckJumpIframes /*= false*/)
-	{
-		if (a_node) {
-			glm::vec4 nodeColor = a_color;
-			if (a_bCheckJumpIframes) {
-				if (!Utils::IsNodeOrChildOfNode(a_node, nullptr)) {
-					const glm::vec4 blue{ 0.2, 0.2, 1.0, 1.0 };
-					nodeColor = blue;
-				}
-			}
-
-			DrawCollider(a_node, a_duration, nodeColor);
-
-			auto node = a_node->AsNode();
-			if (node) {
-				for (auto& child : node->children) {
-					DrawColliders(child.get(), a_duration, a_color, a_bCheckJumpIframes);
-				}
-			}
-		}
-	}
 
 	void UpdateHooks::Nullsub()
 	{
@@ -1820,706 +1468,4 @@ PS_OUTPUT main(PS_INPUT input) {
 	}
 }
 
-namespace Impl
-{
-	void PushActorAway_14067D4A0(RE::AIProcess* proc, RE::Actor* target, RE::NiPoint3* AggressorPos, float KnockDown)
-	{
-		return _generic_foo_<38858, decltype(PushActorAway_14067D4A0)>::eval(proc, target, AggressorPos, KnockDown);
-	}
-
-	inline float radToDeg(float a_radians) { return a_radians * (180.0f / RE::NI_PI); }
-
-	bool BGSImpactManager__PlayImpactEffect_impl_1405A2C60(void* manager, RE::TESObjectREFR* a, RE::BGSImpactDataSet* impacts,
-		const char* bone_name, RE::NiPoint3* Pick, float length, char abApplyNodeRotation, char abUseNodeLocalRotation)
-	{
-		return _generic_foo_<35320, decltype(BGSImpactManager__PlayImpactEffect_impl_1405A2C60)>::eval(manager, a, impacts,
-			bone_name, Pick, length, abApplyNodeRotation, abUseNodeLocalRotation);
-	}
-
-	void* BGSImpactManager__GetSingleton()
-	{
-		REL::Relocation<RE::NiPointer<void*>*> singleton{ REL::ID(515123) };
-		return singleton->get();
-	}
-
-	void play_impact(RE::TESObjectCELL* cell, float one, const char* model, RE::NiPoint3* P_V, RE::NiPoint3* P_from, float a6,
-		uint32_t _7, RE::NiNode* a8)
-	{
-		return _generic_foo_<29218, decltype(play_impact)>::eval(cell, one, model, P_V, P_from, a6, _7, a8);
-	}
-
-	float Actor__GetActorValueModifier(RE::Actor* a, RE::ACTOR_VALUE_MODIFIER mod, RE::ActorValue av)
-	{
-		return _generic_foo_<37524, decltype(Actor__GetActorValueModifier)>::eval(a, mod, av);
-	}
-
-	uint32_t* placeatme(RE::TESDataHandler* datahandler, uint32_t* handle, RE::TESBoundObject* form, RE::NiPoint3* pos,
-		RE::NiPoint3* angle, RE::TESObjectCELL* cell, RE::TESWorldSpace* wrld, RE::TESObjectREFR* a8, char a9, void* a10,
-		char persist, char a12)
-	{
-		return _generic_foo_<13625, decltype(placeatme)>::eval(datahandler, handle, form, pos, angle, cell, wrld, a8, a9, a10,
-			persist, a12);
-	}
-
-	RE::TESObjectREFR* PlaceAtMe(void* vm, int stack, RE::TESObjectREFR* refr, RE::TESBoundObject* form, uint32_t count,
-		char persist, char disabled)
-	{
-		return _generic_foo_<55672, decltype(PlaceAtMe)>::eval(vm, stack, refr, form, count, persist, disabled);
-	}
-}
-using namespace Impl;
-
-namespace FenixUtils
-{
-	namespace Geom
-	{
-		float NiASin(float alpha) { return _generic_foo_<17744, decltype(NiASin)>::eval(alpha); }
-
-		float GetUnclampedZAngleFromVector(const RE::NiPoint3& V)
-		{
-			return _generic_foo_<68821, decltype(GetUnclampedZAngleFromVector)>::eval(V);
-		}
-
-		float GetZAngleFromVector(const RE::NiPoint3& V) { return _generic_foo_<68820, decltype(GetZAngleFromVector)>::eval(V); }
-
-		void CombatUtilities__GetAimAnglesFromVector(const RE::NiPoint3& V, float& rotZ, float& rotX)
-		{
-			return _generic_foo_<46076, decltype(CombatUtilities__GetAimAnglesFromVector)>::eval(V, rotZ, rotX);
-		}
-
-		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& V)
-		{
-			RE::Projectile::ProjectileRot rot;
-			CombatUtilities__GetAimAnglesFromVector(V, rot.z, rot.x);
-			return rot;
-		}
-
-		RE::Projectile::ProjectileRot rot_at(const RE::NiPoint3& from, const RE::NiPoint3& to) { return rot_at(to - from); }
-
-		// Angles -> dir: FromEulerAnglesZYX, A.{A, B, C}.Y.Unitize()
-
-		// Same as FromEulerAnglesZYX.{A, B, C}.Y
-		RE::NiPoint3 angles2dir(const RE::NiPoint3& angles)
-		{
-			RE::NiPoint3 ans;
-
-			float sinx = sinf(angles.x);
-			float cosx = cosf(angles.x);
-			float sinz = sinf(angles.z);
-			float cosz = cosf(angles.z);
-
-			ans.x = cosx * sinz;
-			ans.y = cosx * cosz;
-			ans.z = -sinx;
-
-			return ans;
-		}
-
-		RE::NiPoint3 rotate(float r, const RE::NiPoint3& angles) { return angles2dir(angles) * r; }
-
-		RE::NiPoint3 rotate(const RE::NiPoint3& A, const RE::NiPoint3& angles)
-		{
-			RE::NiMatrix3 R;
-			R.EulerAnglesToAxesZXY(angles);
-			return R * A;
-		}
-
-		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& axis)
-		{
-			float cos_phi = cos(alpha);
-			float sin_phi = sin(alpha);
-			float one_cos_phi = 1 - cos_phi;
-
-			RE::NiMatrix3 R = { { cos_phi + one_cos_phi * axis.x * axis.x, axis.x * axis.y * one_cos_phi - axis.z * sin_phi,
-									axis.x * axis.z * one_cos_phi + axis.y * sin_phi },
-				{ axis.y * axis.x * one_cos_phi + axis.z * sin_phi, cos_phi + axis.y * axis.y * one_cos_phi,
-					axis.y * axis.z * one_cos_phi - axis.x * sin_phi },
-				{ axis.z * axis.x * one_cos_phi - axis.y * sin_phi, axis.z * axis.y * one_cos_phi + axis.x * sin_phi,
-					cos_phi + axis.z * axis.z * one_cos_phi } };
-
-			return R * P;
-		}
-
-		RE::NiPoint3 rotate(const RE::NiPoint3& P, float alpha, const RE::NiPoint3& origin, const RE::NiPoint3& axis_dir)
-		{
-			return rotate(P - origin, alpha, axis_dir) + origin;
-		}
-
-		float get_rotation_angle(const RE::NiPoint3& vel_cur, const RE::NiPoint3& dir_final)
-		{
-			return acosf(std::min(1.0f, vel_cur.Dot(dir_final) / vel_cur.Length()));
-		}
-
-		float clamp_angle(float alpha, float max_alpha)
-		{
-			if (alpha >= 0)
-				return std::min(max_alpha, alpha);
-			else
-				return std::max(-max_alpha, alpha);
-		}
-
-		bool is_angle_small(float alpha) { return abs(alpha) < 0.001f; }
-
-		RE::NiPoint3 rotateVel(const RE::NiPoint3& vel_cur, float max_alpha, const RE::NiPoint3& dir_final)
-		{
-			float needed_angle = get_rotation_angle(vel_cur, dir_final);
-			if (!is_angle_small(needed_angle)) {
-				float phi = clamp_angle(needed_angle, max_alpha);
-				return rotate(vel_cur, phi, vel_cur.UnitCross(dir_final));
-			} else {
-				return vel_cur;
-			}
-		}
-
-		namespace Projectile
-		{
-			void update_node_rotation(RE::Projectile* proj, const RE::NiPoint3& V)
-			{
-				float rotZ, rotX;
-				CombatUtilities__GetAimAnglesFromVector(V, rotZ, rotX);
-				TESObjectREFR__SetAngleOnReferenceX(proj, rotX);
-				TESObjectREFR__SetAngleOnReferenceZ(proj, rotZ);
-				if (auto node = proj->Get3D()) {
-					RE::NiMatrix3 M;
-					M.EulerAnglesToAxesZXY(rotX, 0, rotZ);
-					node->local.rotate = M;
-				}
-			}
-
-			void update_node_rotation(RE::Projectile* proj) { return update_node_rotation(proj, proj->linearVelocity); }
-
-			void aimToPoint(RE::Projectile* proj, const RE::NiPoint3& P)
-			{
-				auto dir = P - proj->GetPosition();
-				auto angles = FenixUtils::Geom::rot_at(dir);
-
-				FenixUtils::TESObjectREFR__SetAngleOnReferenceX(proj, angles.x);
-				FenixUtils::TESObjectREFR__SetAngleOnReferenceZ(proj, angles.z);
-
-				if (proj->IsMissileProjectile()) {
-					if (float dist = dir.SqrLength(); dist > 0.0000001f) {
-						proj->linearVelocity = dir * sqrtf(proj->linearVelocity.SqrLength() / dist);
-					}
-					FenixUtils::Geom::Projectile::update_node_rotation(proj);
-				}
-
-				proj->flags.reset(RE::Projectile::Flags::kAutoAim);
-			}
-		}
-
-		namespace Actor
-		{
-			RE::NiPoint3 CalculateLOSLocation(RE::TESObjectREFR* refr, LineOfSightLocation los_loc)
-			{
-				return _generic_foo_<46021, decltype(CalculateLOSLocation)>::eval(refr, los_loc);
-			}
-
-			RE::NiPoint3 raycast(RE::Actor* caster)
-			{
-				auto havokWorldScale = RE::bhkWorld::GetWorldScale();
-				RE::bhkPickData pick_data;
-				RE::NiPoint3 ray_start, ray_end;
-
-				ray_start = CalculateLOSLocation(caster, LineOfSightLocation::kHead);
-				ray_end = ray_start + FenixUtils::Geom::rotate(2000000000, caster->data.angle);
-				pick_data.rayInput.from = ray_start * havokWorldScale;
-				pick_data.rayInput.to = ray_end * havokWorldScale;
-
-				uint32_t collisionFilterInfo = 0;
-				caster->GetCollisionFilterInfo(collisionFilterInfo);
-				pick_data.rayInput.filterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
-				                                static_cast<uint32_t>(RE::COL_LAYER::kCharController);
-
-				caster->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
-				RE::NiPoint3 hitpos;
-				if (pick_data.rayOutput.HasHit()) {
-					hitpos = ray_start + (ray_end - ray_start) * pick_data.rayOutput.hitFraction;
-				} else {
-					hitpos = ray_end;
-				}
-				return hitpos;
-			}
-
-			RE::NiPoint3 AnticipatePos(RE::Actor* a, float dtime)
-			{
-				RE::NiPoint3 ans, eye_pos;
-				a->GetLinearVelocity(ans);
-				ans *= dtime;
-				eye_pos = CalculateLOSLocation(a, LineOfSightLocation::kTorso);
-				ans += eye_pos;
-				return ans;
-			}
-
-			LineOfSightLocation Actor__CalculateLOS(RE::Actor* caster, RE::Actor* target, float viewCone)
-			{
-				return _generic_foo_<36752, decltype(Actor__CalculateLOS)>::eval(caster, target, viewCone);
-			}
-
-			bool ActorInLOS(RE::Actor* caster, RE::Actor* target, float viewCone)
-			{
-				return Actor__CalculateLOS(caster, target, viewCone) != LineOfSightLocation::kNone;
-			}
-
-			float Actor__CalculateAimDelta(RE::Actor* a, const RE::NiPoint3& target_pos)
-			{
-				return _generic_foo_<36757, decltype(Actor__CalculateAimDelta)>::eval(a, target_pos);
-			}
-
-			bool Actor__IsPointInAimCone(RE::Actor* a, RE::NiPoint3* target_pos, float viewCone)
-			{
-				return _generic_foo_<36756, decltype(Actor__IsPointInAimCone)>::eval(a, target_pos, viewCone);
-			}
-		}
-	}
-
-	namespace Random
-	{
-		// random(0..1) <= chance
-		bool RandomBoolChance(float prop) { return _generic_foo_<26009, decltype(RandomBoolChance)>::eval(prop); }
-
-		float Float(float min, float max) { return _generic_foo_<14109, decltype(Float)>::eval(min, max); }
-
-		float FloatChecked(float min, float max) { return _generic_foo_<25867, decltype(FloatChecked)>::eval(min, max); }
-
-		float FloatTwoPi() { return _generic_foo_<15093, decltype(FloatTwoPi)>::eval(); }
-
-		float Float0To1() { return _generic_foo_<28658, decltype(FloatTwoPi)>::eval(); }
-
-		float FloatNeg1To1() { return _generic_foo_<28716, decltype(FloatTwoPi)>::eval(); }
-
-		int32_t random_range(int32_t min, int32_t max)
-		{
-			return _generic_foo_<56478, int32_t(void*, uint32_t, void*, int32_t a_min, int32_t a_max)>::eval(nullptr, 0, nullptr,
-				min, max);
-		}
-	}
-
-	namespace Json
-	{
-		int get_mod_index(std::string_view name)
-		{
-			auto esp = RE::TESDataHandler::GetSingleton()->LookupModByName(name);
-			if (!esp)
-				return -1;
-			return !esp->IsLight() ? esp->compileIndex << 24 : (0xFE000 | esp->smallFileCompileIndex) << 12;
-		}
-
-		uint32_t get_formid(const std::string& name)
-		{
-			if (auto pos = name.find('|'); pos != std::string::npos) {
-				auto ind = get_mod_index(name.substr(0, pos));
-				return ind | std::stoul(name.substr(pos + 1), nullptr, 16);
-			} else {
-				return std::stoul(name, nullptr, 16);
-			}
-		}
-
-		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			auto& point = jobj[field_name];
-			return { point[0].asFloat(), point[1].asFloat(), point[2].asFloat() };
-		}
-
-		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			auto& point = jobj[field_name];
-			return { point[0].asFloat(), point[1].asFloat() };
-		}
-
-		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			return jobj.isMember(field_name) ? getPoint2(jobj, field_name) : RE::Projectile::ProjectileRot{ 0, 0 };
-		}
-
-		std::string getString(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			return jobj[field_name].asString();
-		}
-
-		std::string mb_getString(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			return jobj.isMember(field_name) ? getString(jobj, field_name) : "";
-		}
-
-		float getFloat(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			return jobj[field_name].asFloat();
-		}
-
-		bool getBool(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			return jobj[field_name].asBool();
-		}
-
-		uint32_t getUint32(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			assert(jobj.isMember(field_name));
-			return jobj[field_name].asUInt();
-		}
-	}
-
-	namespace Timer
-	{
-		float get_time() { return *REL::Relocation<float*>(REL::ID(517597)); }
-
-		bool passed(float timestamp, float interval) { return get_time() - timestamp > interval; }
-
-		bool passed(RE::AITimer& timer) { return passed(timer.aiTimer, timer.timer); }
-
-		void updateAndWait(RE::AITimer& timer, float interval)
-		{
-			timer.aiTimer = get_time();
-			timer.timer = interval;
-		}
-	}
-
-	namespace Behavior
-	{
-		RE::hkbNode* lookup_node(RE::hkbBehaviorGraph* root_graph, const char* name)
-		{
-			RE::BShkbUtils::GraphTraverser traverser(6, root_graph);
-			for (auto node = traverser.Next(); node; node = traverser.Next()) {
-				if (node->name.c_str() && !std::strcmp(node->name.c_str(), name))
-					return node;
-			}
-			return nullptr;
-		}
-
-		int32_t get_implicit_id_variable(RE::hkbBehaviorGraph* graph, const char* name)
-		{
-			const auto& names = graph->data->stringData->variableNames;
-			for (int32_t i = 0; i < names.size(); i++) {
-				if (!std::strcmp(names[i].c_str(), name))
-					return i;
-			}
-			return -1;
-		}
-
-		RE::hkbEventBase::SystemEventIDs get_implicit_id_event(RE::hkbBehaviorGraph* graph, const char* name)
-		{
-			const auto& names = graph->data->stringData->eventNames;
-			for (int32_t i = 0; i < names.size(); i++) {
-				if (!std::strcmp(names[i].c_str(), name))
-					return static_cast<RE::hkbEventBase::SystemEventIDs>(i);
-			}
-			return RE::hkbEventBase::SystemEventIDs::kNull;
-		}
-
-		const char* get_event_name_implicit(RE::hkbBehaviorGraph* graph, RE::hkbEventBase::SystemEventIDs implicit_id)
-		{
-			if (implicit_id == RE::hkbEventBase::SystemEventIDs::kNull)
-				return nullptr;
-
-			return graph->data->stringData->eventNames[static_cast<uint32_t>(implicit_id)].c_str();
-		}
-
-		const char* get_event_name_explicit(RE::hkbBehaviorGraph* graph, int32_t explicit_id)
-		{
-			if (auto map = graph->eventIDMap.get()) {
-				auto implicit_id = map->map.getWithDefault(static_cast<int64_t>(explicit_id) + 1, -1);
-				if (implicit_id != -1) {
-					return get_event_name_implicit(graph, static_cast<RE::hkbEventBase::SystemEventIDs>(implicit_id));
-				}
-			}
-
-			return nullptr;
-		}
-
-		const char* get_variable_name(RE::hkbBehaviorGraph* graph, int32_t ind)
-		{
-			return graph->data->stringData->variableNames[static_cast<uint32_t>(ind)].c_str();
-		}
-	}
-
-	float Projectile__GetSpeed(RE::Projectile* proj) { return _generic_foo_<42958, decltype(Projectile__GetSpeed)>::eval(proj); }
-
-	void Projectile__set_collision_layer(RE::Projectile* proj, RE::COL_LAYER collayer)
-	{
-		if (auto shape = (RE::bhkShapePhantom*)proj->unk0E0)
-			if (auto ref = (RE::hkpShapePhantom*)shape->referencedObject.get()) {
-				auto& colFilterInfo = ref->collidable.broadPhaseHandle.collisionFilterInfo;
-				colFilterInfo &= ~0x7F;
-				colFilterInfo |= static_cast<uint32_t>(collayer);
-			}
-	}
-
-	void TESObjectREFR__SetAngleOnReferenceX(RE::TESObjectREFR* refr, float angle_x)
-	{
-		return _generic_foo_<19360, decltype(TESObjectREFR__SetAngleOnReferenceX)>::eval(refr, angle_x);
-	}
-
-	void TESObjectREFR__SetAngleOnReferenceZ(RE::TESObjectREFR* refr, float angle_z)
-	{
-		return _generic_foo_<19362, decltype(TESObjectREFR__SetAngleOnReferenceZ)>::eval(refr, angle_z);
-	}
-
-	RE::TESObjectARMO* GetEquippedShield(RE::Actor* a) { return _generic_foo_<37624, decltype(GetEquippedShield)>::eval(a); }
-
-	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem)
-	{
-		return _generic_foo_<11194, decltype(getAVEffectSetting)>::eval(mgitem);
-	}
-
-	void damage_stamina_withdelay(RE::Actor* a, float val)
-	{
-		const RE::ActorValue avStamina = RE::ActorValue::kStamina;
-
-		if (val > 0 && !a->IsInvulnerable()) {
-			float old = a->GetActorValue(avStamina);
-			a->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, avStamina, -val);
-			if (a->GetActorValue(avStamina) <= 0.0f) {
-				if (auto proc = a->currentProcess) {
-					float rate = _generic_foo_<37515, float(RE::Actor*, RE::ActorValue)>::eval(a, avStamina);
-					if (rate > 0.0001f) {
-						float delay = (val - old) / rate;
-						_generic_foo_<38526, void(RE::AIProcess*, RE::ActorValue, float)>::eval(proc, avStamina, delay);
-						if (a->IsPlayerRef())
-							_generic_foo_<51907, void(RE::ActorValue)>::eval(avStamina);
-					}
-				}
-			}
-		}
-	}
-
-	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val,
-		RE::Actor* attacker)
-	{
-		return _generic_foo_<37523, decltype(damageav_attacker)>::eval(victim, i1, i2, val, attacker);
-	}
-
-	void damageav(RE::Actor* a, RE::ActorValue av, float val)
-	{
-		a->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, av, -val);
-	}
-
-	RE::TESObjectWEAP* get_UnarmedWeap()
-	{
-		constexpr REL::ID UnarmedWeap(static_cast<std::uint64_t>(514923));
-		REL::Relocation<RE::NiPointer<RE::TESObjectWEAP>*> singleton{ UnarmedWeap };
-		return singleton->get();
-	}
-
-	bool PlayIdle(RE::AIProcess* proc, RE::Actor* attacker, RE::DEFAULT_OBJECT smth, RE::TESIdleForm* idle, bool a5, bool a6,
-		RE::Actor* target)
-	{
-		return _generic_foo_<38290, decltype(PlayIdle)>::eval(proc, attacker, smth, idle, a5, a6, target);
-	}
-
-	float PlayerCharacter__get_reach(RE::Actor* a) { return _generic_foo_<37588, decltype(PlayerCharacter__get_reach)>::eval(a); }
-
-	float GetHeadingAngle(RE::TESObjectREFR* a, const RE::NiPoint3& a_pos, bool a_abs)
-	{
-		float theta = RE::NiFastATan2(a_pos.x - a->GetPositionX(), a_pos.y - a->GetPositionY());
-		float heading = Impl::radToDeg(theta - a->GetAngleZ());
-
-		if (heading < -180.0f) {
-			heading += 360.0f;
-		}
-
-		if (heading > 180.0f) {
-			heading -= 360.0f;
-		}
-
-		return a_abs ? RE::NiAbs(heading) : heading;
-	}
-
-	void UnequipItem(RE::Actor* a, RE::TESBoundObject* item) { RE::ActorEquipManager::GetSingleton()->UnequipObject(a, item); }
-
-	void knock(RE::Actor* target, RE::Actor* aggressor, float KnockDown)
-	{
-		if (target->currentProcess)
-			Impl::PushActorAway_14067D4A0(target->currentProcess, target, &aggressor->data.location, KnockDown);
-	}
-
-	void cast_spell(RE::Actor* victim, RE::Actor* attacker, RE::SpellItem* spell)
-	{
-		RE::MagicCaster* caster = attacker->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant);
-		if (caster && spell) {
-			caster->CastSpellImmediate(spell, false, victim, 1.0f, false, 0.0f, attacker);
-		}
-	}
-
-	void play_sound(RE::TESObjectREFR* a, int formid)
-	{
-		RE::BSSoundHandle handle;
-		handle.soundID = static_cast<uint32_t>(-1);
-		handle.assumeSuccess = false;
-		*(uint32_t*)&handle.state = 0;
-
-		auto manager = _generic_foo_<66391, void*()>::eval();
-		_generic_foo_<66401, int(void*, RE::BSSoundHandle*, int, int)>::eval(manager, &handle, formid, 16);
-		if (_generic_foo_<66370, bool(RE::BSSoundHandle*, float, float, float)>::eval(&handle, a->data.location.x,
-				a->data.location.y, a->data.location.z)) {
-			_generic_foo_<66375, void(RE::BSSoundHandle*, RE::NiAVObject*)>::eval(&handle, a->Get3D());
-			_generic_foo_<66355, bool(RE::BSSoundHandle*)>::eval(&handle);
-		}
-	}
-
-	bool play_impact_(RE::TESObjectREFR* a, int)
-	{
-		auto impacts = RE::TESForm::LookupByID<RE::BGSImpactDataSet>(0x000183FF);
-		//auto impacts = RE::TESDataHandler::GetSingleton()->LookupForm<RE::BGSImpactDataSet>(RE::FormID(0x1A3FB), "Dawnguard.esm");
-		RE::NiPoint3 Pick = { 0.0f, 0.0f, 1.0f };
-		return BGSImpactManager__PlayImpactEffect_impl_1405A2C60(BGSImpactManager__GetSingleton(), a, impacts, "WEAPON", &Pick,
-			125.0f, true, false);
-	}
-
-	void play_impact(RE::TESObjectREFR* a, RE::BGSImpactData* impact, RE::NiPoint3* P_V, RE::NiPoint3* P_from, RE::NiNode* bone)
-	{
-		Impl::play_impact(a->GetParentCell(), 1.0f, impact->GetModel(), P_V, P_from, 1.0f, 7, bone);
-	}
-
-	float clamp01(float t) { return std::max(0.0f, std::min(1.0f, t)); }
-
-	float get_total_av(RE::Actor* a, RE::ActorValue av)
-	{
-		float permanent = a->GetPermanentActorValue(av);
-		float temporary = Actor__GetActorValueModifier(a, RE::ACTOR_VALUE_MODIFIER::kTemporary, av);
-		return permanent + temporary;
-	}
-
-	float get_dist2(RE::TESObjectREFR* a, RE::TESObjectREFR* b) { return a->GetPosition().GetSquaredDistance(b->GetPosition()); }
-
-	bool TESObjectREFR__HasEffectKeyword(RE::TESObjectREFR* a, RE::BGSKeyword* kwd)
-	{
-		return _generic_foo_<19220, decltype(TESObjectREFR__HasEffectKeyword)>::eval(a, kwd);
-	}
-
-	RE::BGSAttackDataPtr get_attackData(RE::Actor* a)
-	{
-		if (auto proc = a->currentProcess) {
-			if (auto high = proc->high) {
-				return high->attackData;
-			}
-		}
-		return nullptr;
-	}
-
-	bool is_powerattacking(RE::Actor* a) { return _generic_foo_<37639, decltype(is_powerattacking)>::eval(a); }
-
-	RE::TESObjectWEAP* get_weapon(RE::Actor* a)
-	{
-		if (auto __weap = a->GetAttackingWeapon()) {
-			if (auto _weap = __weap->object; _weap->IsWeapon()) {
-				return _weap->As<RE::TESObjectWEAP>();
-			}
-		}
-
-		return nullptr;
-	}
-
-	bool is_human(RE::Actor* a)
-	{
-		auto race = a->GetRace();
-		if (!race)
-			return false;
-
-		auto flag = race->validEquipTypes.underlying();
-		auto mask = static_cast<uint32_t>(RE::TESRace::EquipmentFlag::kOneHandSword) |
-		            static_cast<uint32_t>(RE::TESRace::EquipmentFlag::kTwoHandSword);
-		return (flag & mask) > 0;
-	}
-
-	void set_RegenDelay(RE::AIProcess* proc, RE::ActorValue av, float time)
-	{
-		return _generic_foo_<38526, decltype(set_RegenDelay)>::eval(proc, av, time);
-	}
-
-	void FlashHudMenuMeter__blink(RE::ActorValue av) { _generic_foo_<51907, decltype(FlashHudMenuMeter__blink)>::eval(av); }
-
-	float get_regen(RE::Actor* a, RE::ActorValue av) { return _generic_foo_<37515, decltype(get_regen)>::eval(a, av); }
-
-	void damagestamina_delay_blink(RE::Actor* a, float cost)
-	{
-		float old_stamina = a->GetActorValue(RE::ActorValue::kStamina);
-		damageav(a, RE::ActorValue::kStamina, cost);
-		if (a->GetActorValue(RE::ActorValue::kStamina) <= 0.0f) {
-			if (auto proc = a->currentProcess) {
-				float StaminaRegenDelay = (cost - old_stamina) / get_regen(a, RE::ActorValue::kStamina);
-				set_RegenDelay(proc, RE::ActorValue::kStamina, StaminaRegenDelay);
-				if (a->IsPlayerRef()) {
-					FlashHudMenuMeter__blink(RE::ActorValue::kStamina);
-				}
-			}
-		}
-	}
-
-	float getAV_pers(RE::Actor* a, RE::ActorValue av)
-	{
-		float all = get_total_av(a, av);
-		if (all < 0.000001)
-			return 1.0f;
-
-		float cur = a->GetActorValue(av);
-		if (cur < 0.0f)
-			return 0.0f;
-
-		return cur / all;
-	}
-
-	float lerp(float x, float Ax, float Ay, float Bx, float By)
-	{
-		if (abs(Bx - Ax) < 0.0000001)
-			return Ay;
-
-		return (Ay * (Bx - x) + By * (x - Ax)) / (Bx - Ax);
-	}
-
-	void AddItem(RE::Actor* a, RE::TESBoundObject* item, RE::ExtraDataList* extraList, int count, RE::TESObjectREFR* fromRefr)
-	{
-		return _generic_foo_<36525, decltype(AddItem)>::eval(a, item, extraList, count, fromRefr);
-	}
-
-	void AddItemPlayer(RE::TESBoundObject* item, int count)
-	{
-		return AddItem(RE::PlayerCharacter::GetSingleton(), item, nullptr, count, nullptr);
-	}
-
-	int RemoveItemPlayer(RE::TESBoundObject* item, int count)
-	{
-		return _generic_foo_<16564, decltype(RemoveItemPlayer)>::eval(item, count);
-	}
-
-	int get_item_count(RE::Actor* a, RE::TESBoundObject* item)
-	{
-		if (auto changes = a->GetInventoryChanges()) {
-			return _generic_foo_<15868, int(RE::InventoryChanges*, RE::TESBoundObject*)>::eval(changes, item);
-		}
-
-		return 0;
-	}
-
-	uint32_t* placeatme(RE::TESObjectREFR* a, uint32_t* handle, RE::TESBoundObject* form, RE::NiPoint3* pos, RE::NiPoint3* angle)
-	{
-		return Impl::placeatme(RE::TESDataHandler::GetSingleton(), handle, form, pos, angle, a->GetParentCell(),
-			a->GetWorldspace(), nullptr, 0, nullptr, false, 1);
-	}
-
-	RE::TESObjectREFR* placeatmepap(RE::TESObjectREFR* a, RE::TESBoundObject* form, int count)
-	{
-		if (!form || !form->IsBoundObject())
-			return nullptr;
-
-		return Impl::PlaceAtMe(nullptr, 0, a, form, count, false, false);
-	}
-
-	bool is_playable_spel(RE::SpellItem* spel)
-	{
-		using ST = RE::MagicSystem::SpellType;
-		using AV = RE::ActorValue;
-
-		auto type = spel->GetSpellType();
-		if (type == ST::kStaffEnchantment || type == ST::kScroll || type == ST::kSpell || type == ST::kLeveledSpell) {
-			auto av = spel->GetAssociatedSkill();
-			return av == AV::kAlteration || av == AV::kConjuration || av == AV::kDestruction || av == AV::kIllusion ||
-			       av == AV::kRestoration;
-		}
-
-		return false;
-	}
-}
+#pragma warning(pop)
