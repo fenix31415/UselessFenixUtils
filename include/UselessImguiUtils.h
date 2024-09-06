@@ -1,6 +1,7 @@
 #pragma once
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
 #include <dxgi.h>
@@ -10,8 +11,13 @@ namespace ImguiUtils
 	template <void (*show)(), bool (*is_hide_hotkey)(RE::ButtonEvent* b), bool (*is_enable_hotkey)(RE::ButtonEvent* b)>
 	class ImGuiHelper
 	{
+	public:
 		static inline std::atomic<bool> IsOpen;
 		static inline std::atomic<bool> IsActive;
+
+		static inline std::mutex input_lock;
+
+	private:
 
 		static void toggle_IsOpen()
 		{
@@ -84,7 +90,10 @@ namespace ImguiUtils
 			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
 			io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
 			io.ConfigWindowsMoveFromTitleBarOnly = true;
-			io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\arial.ttf", 14, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+			//io.Fonts->AddFontFromFileTTF("c:\\Users\\dimka\\AppData\\Local\\Microsoft\\Windows\\Fonts\\Play-Regular.ttf", 12, nullptr,
+			//	io.Fonts->GetGlyphRangesCyrillic());
+			//io.Fonts->AddFontFromFileTTF("data\\skse\\plugins\\BehaviorViewer\\saxmono.ttf", 12, nullptr,
+			//	io.Fonts->GetGlyphRangesDefault());
 
 			ImGui_ImplWin32_Init(sd.OutputWindow);
 			ImGui_ImplDX11_Init(device, context);
@@ -107,7 +116,9 @@ namespace ImguiUtils
 				io.DisplaySize.x = static_cast<float>(screenSize.width);
 				io.DisplaySize.y = static_cast<float>(screenSize.height);
 			}
+			input_lock.lock();
 			ImGui::NewFrame();
+			input_lock.unlock();
 
 			if (IsOpen)
 				show();
@@ -611,7 +622,9 @@ namespace ImguiUtils
 			Process(a_evns);
 			if (skipevents()) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
+				input_lock.lock();
 				ProcessEvent(a_evns);
+				input_lock.unlock();
 			} else {
 				_DispatchInputEvent(a_dispatcher, a_evns);
 			}

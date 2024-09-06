@@ -221,6 +221,44 @@ namespace FenixUtils
 		const char* get_variable_name(RE::hkbBehaviorGraph* graph, int32_t ind);
 	}
 
+	struct Plinterp
+	{
+		std::vector<std::pair<float, float>> data;
+
+		float eval(float val);
+
+		void init(const ::Json::Value& points);
+	private:
+		std::pair<float, float> get_point2(const ::Json::Value& val) { return { val[0].asFloat(), val[1].asFloat() }; }
+	};
+
+	namespace IO
+	{
+		template <typename T>
+		void writeT(std::ofstream& file, const T& val)
+		{
+			file.write((char*)&val, sizeof(T));
+		}
+
+		void write_string(std::ofstream& file, const std::string_view& sv);
+		void write_string(std::ofstream& file, const char* s);
+		std::string read_string(std::ifstream& file);
+
+		template <typename T>
+		T readT(std::ifstream& file)
+		{
+			T ans;
+			file.read((char*)&ans, sizeof(T));
+			return ans;
+		}
+
+		template <typename T>
+		void readT(std::ifstream& file, T& ans)
+		{
+			file.read((char*)&ans, sizeof(T));
+		}
+	}
+
 	void tolower(std::string& data);
 
 	float Projectile__GetSpeed(RE::Projectile* proj);
@@ -242,6 +280,7 @@ namespace FenixUtils
 	void knock(RE::Actor* target, RE::Actor* aggressor, float KnockDown);
 	void cast_spell(RE::Actor* victim, RE::Actor* attacker, RE::SpellItem* spell);
 	float clamp01(float t);
+	float clamp(float t, float min, float max);
 
 	template <float val = 0.5f>
 	void stagger(RE::Actor* victim, RE::Actor* attacker = nullptr)
@@ -349,6 +388,17 @@ namespace FenixUtils
 using FenixUtils::_generic_foo_;
 using FenixUtils::add_trampoline;
 
+template <>
+struct fmt::formatter<RE::NiPoint3> : formatter<float>
+{
+	format_context::iterator format(const RE::NiPoint3& c, format_context& ctx) const;
+};
+template <>
+struct fmt::formatter<RE::NiQuaternion> : formatter<float>
+{
+	format_context::iterator format(const RE::NiQuaternion& c, format_context& ctx) const;
+};
+
 constexpr uint32_t hash(const char* data, size_t const size) noexcept
 {
 	uint32_t hash = 5381;
@@ -392,6 +442,105 @@ constexpr uint32_t operator"" _hl(const char* str, size_t size) noexcept
 class SettingsBase
 {
 protected:
+	class Hotkeys
+	{
+		static void strip(std::string& str)
+		{
+			if (str.length() == 0) {
+				return;
+			}
+
+			auto start_it = str.begin();
+			auto end_it = str.rbegin();
+			while (std::isspace(*start_it)) {
+				++start_it;
+				if (start_it == str.end())
+					break;
+			}
+			while (std::isspace(*end_it)) {
+				++end_it;
+				if (end_it == str.rend())
+					break;
+			}
+			auto start_pos = start_it - str.begin();
+			auto end_pos = end_it.base() - str.begin();
+			str = start_pos <= end_pos ? std::string(start_it, end_it.base()) : "";
+		}
+
+		enum class AddKeys : uint32_t
+		{
+			Shift,
+			Ctrl,
+			Alt,
+
+			Total
+		};
+		static inline constexpr size_t AddKeysTotal = static_cast<size_t>(AddKeys::Total);
+
+		int key;
+		std::array<int, AddKeysTotal> additionals = { {} };
+
+		bool isPressed_adds()
+		{
+			bool ans = true;
+			for (int k : additionals) {
+				ans = ans && (k == 0 || RE::BSInputDeviceManager::GetSingleton()->GetKeyboard()->IsPressed(k));
+			}
+			return ans;
+		}
+
+	public:
+		Hotkeys(int key = 71) : key(key) {}
+
+		void load_key(std::string s)
+		{
+			using K = RE::BSKeyboardDevice::Key;
+
+			strip(s);
+			int keycode = std::stoi(s);
+
+			AddKeys type = AddKeys::Total;
+			switch (keycode) {
+			case K::kRightAlt:
+			case K::kLeftAlt:
+				type = AddKeys::Alt;
+				break;
+			case K::kLeftControl:
+			case K::kRightControl:
+				type = AddKeys::Ctrl;
+				break;
+			case K::kLeftShift:
+			case K::kRightShift:
+				type = AddKeys::Shift;
+				break;
+			default:
+				break;
+			}
+
+			if (type != AddKeys::Total) {
+				additionals[static_cast<size_t>(type)] = keycode;
+			} else {
+				key = keycode;
+			}
+		}
+
+		bool isPressed(int k) { return k == key && isPressed_adds(); }
+	};
+
+	static void ReadHotkey(const CSimpleIniA& ini, const char* section, const char* setting, Hotkeys& ans)
+	{
+		std::string keys;
+		if (ReadString(ini, section, setting, keys)) {
+			size_t pos = 0;
+			std::string token;
+			while ((pos = keys.find('+')) != std::string::npos) {
+				ans.load_key(keys.substr(0, pos));
+				keys.erase(0, pos + 1);
+			}
+			ans.load_key(keys);
+		}
+	}
+
 	static bool ReadBool(const CSimpleIniA& ini, const char* section, const char* setting, bool& ans)
 	{
 		if (ini.GetValue(section, setting)) {

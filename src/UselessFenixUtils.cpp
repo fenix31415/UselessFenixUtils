@@ -416,6 +416,56 @@ namespace FenixUtils
 		}
 	}
 
+	float Plinterp::eval(float val)
+	{
+		if (val <= data[0].first)
+			return data[0].second;
+
+		if (val >= data.back().first)
+			return data.back().second;
+
+		size_t i;
+		for (i = 1; data[i].first < val; i++) {}
+		auto [Ax, Ay] = data[i - 1];
+		auto [Bx, By] = data[i];
+
+		return FenixUtils::lerp(val, Ax, Ay, Bx, By);
+	}
+
+	void Plinterp::init(const ::Json::Value& points)
+	{
+		data.clear();
+		assert(points.size() >= 1);
+		for (uint32_t i = 0; i < points.size(); i++) {
+			data.push_back(get_point2(points[i]));
+		}
+	}
+	
+	namespace IO
+	{
+		void write_string(std::ofstream& file, const std::string_view& sv)
+		{
+			auto size = sv.size();
+			writeT(file, static_cast<uint32_t>(size));
+			file.write(sv.data(), size);
+		}
+
+		void write_string(std::ofstream& file, const char* s)
+		{
+			auto size = std::strlen(s);
+			writeT(file, static_cast<uint32_t>(size));
+			file.write(s, size);
+		}
+
+		std::string read_string(std::ifstream& file)
+		{
+			auto size = readT<uint32_t>(file);
+			std::string ans(size, '?');
+			file.read(ans.data(), ans.size());
+			return ans;
+		}
+	}
+
 	void tolower(std::string& data)
 	{
 		std::transform(data.begin(), data.end(), data.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -559,7 +609,8 @@ namespace FenixUtils
 		Impl::play_impact(a->GetParentCell(), 1.0f, impact->GetModel(), P_V, P_from, 1.0f, 7, bone);
 	}
 
-	float clamp01(float t) { return std::max(0.0f, std::min(1.0f, t)); }
+	float clamp(float t, float min, float max) { return std::max(min, std::min(max, t)); }
+	float clamp01(float t) { return clamp(t, 0.0f, 1.0f); }
 
 	float get_total_av(RE::Actor* a, RE::ActorValue av)
 	{
@@ -707,4 +758,53 @@ namespace FenixUtils
 
 		return false;
 	}
+}
+
+auto fmt::formatter<RE::NiPoint3>::format(const RE::NiPoint3& c, format_context& ctx) const -> format_context::iterator
+{
+	auto out = ctx.out();
+	*out = '[';
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.x, ctx);
+
+	out = fmt::format_to(out, ", ");
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.y, ctx);
+
+	out = fmt::format_to(out, ", ");
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.z, ctx);
+
+	*out = ']';
+	return out;
+}
+
+auto fmt::formatter<RE::NiQuaternion>::format(const RE::NiQuaternion& c, format_context& ctx) const -> format_context::iterator
+{
+	auto out = ctx.out();
+	*out = '<';
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.w, ctx);
+
+	out = fmt::format_to(out, ", [");
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.x, ctx);
+
+	out = fmt::format_to(out, ", ");
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.y, ctx);
+
+	out = fmt::format_to(out, ", ");
+
+	ctx.advance_to(out);
+	out = formatter<float>::format(c.z, ctx);
+
+	out = fmt::format_to(out, "]>");
+	return out;
 }
