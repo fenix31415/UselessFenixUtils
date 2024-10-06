@@ -53,6 +53,48 @@ namespace FenixUtils
 {
 	namespace Geom
 	{
+		RE::NiPoint3& HK2NI(RE::NiPoint3& ans, RE::hkVector4 const& val)
+		{
+			ans = { val.quad.m128_f32[0], val.quad.m128_f32[1], val.quad.m128_f32[2] };
+			ans *= RE::bhkWorld::GetWorldScaleInverse();
+			return ans;
+		}
+
+		RE::NiPoint3& HK2NI_noscale(RE::NiPoint3& ans, RE::hkVector4 const& val)
+		{
+			ans = { val.quad.m128_f32[0], val.quad.m128_f32[1], val.quad.m128_f32[2] };
+			return ans;
+		}
+
+		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, uint32_t filter_info)
+		{
+			auto havokWorldScale = RE::bhkWorld::GetWorldScale();
+			RE::bhkPickData pick_data;
+			pick_data.rayInput.from = from * havokWorldScale;
+			pick_data.rayInput.to = to * havokWorldScale;
+
+			pick_data.rayInput.filterInfo = filter_info;
+
+			RE::PlayerCharacter::GetSingleton()->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
+			
+			return pick_data.rayOutput.HasHit() ? from + (to - from) * pick_data.rayOutput.hitFraction : to;
+		}
+
+		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, bool ignore_player)
+		{
+			if (ignore_player) {
+				uint32_t collisionFilterInfo = 0;
+				auto p = RE::PlayerCharacter::GetSingleton();
+				p->GetCollisionFilterInfo(collisionFilterInfo);
+				collisionFilterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
+				                      static_cast<uint32_t>(RE::COL_LAYER::kCharController);
+
+				return raycast(from, to, collisionFilterInfo);
+			} else {
+				return raycast(from, to, static_cast<uint32_t>(RE::COL_LAYER::kCharController));
+			}
+		}
+
 		float NiASin(float alpha) { return _generic_foo_<17744, decltype(NiASin)>::eval(alpha); }
 
 		float GetUnclampedZAngleFromVector(const RE::NiPoint3& V)
@@ -196,28 +238,17 @@ namespace FenixUtils
 
 			RE::NiPoint3 raycast(RE::Actor* caster)
 			{
-				auto havokWorldScale = RE::bhkWorld::GetWorldScale();
-				RE::bhkPickData pick_data;
 				RE::NiPoint3 ray_start, ray_end;
 
 				ray_start = CalculateLOSLocation(caster, LineOfSightLocation::kHead);
 				ray_end = ray_start + FenixUtils::Geom::rotate(2000000000, caster->data.angle);
-				pick_data.rayInput.from = ray_start * havokWorldScale;
-				pick_data.rayInput.to = ray_end * havokWorldScale;
 
 				uint32_t collisionFilterInfo = 0;
 				caster->GetCollisionFilterInfo(collisionFilterInfo);
-				pick_data.rayInput.filterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
+				collisionFilterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
 				                                static_cast<uint32_t>(RE::COL_LAYER::kCharController);
 
-				caster->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
-				RE::NiPoint3 hitpos;
-				if (pick_data.rayOutput.HasHit()) {
-					hitpos = ray_start + (ray_end - ray_start) * pick_data.rayOutput.hitFraction;
-				} else {
-					hitpos = ray_end;
-				}
-				return hitpos;
+				return Geom::raycast(ray_start, ray_end, collisionFilterInfo);
 			}
 
 			RE::NiPoint3 AnticipatePos(RE::Actor* a, float dtime)
