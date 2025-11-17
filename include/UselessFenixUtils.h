@@ -260,6 +260,8 @@ namespace FenixUtils
 		const char* get_event_name_internal(RE::hkbBehaviorGraph* graph, int32_t internal_id);
 		const char* get_event_name_external(RE::hkbBehaviorGraph* graph, int32_t external_id);
 		const char* get_variable_name(RE::hkbBehaviorGraph* graph, int32_t ind);
+		RE::Actor* hkbChar2Char(RE::hkbCharacter& hkbChar);
+		RE::BShkbAnimationGraph* hkbChar2bshkbgraph(RE::hkbCharacter& hkbChar);
 	}
 
 	struct Plinterp
@@ -493,6 +495,12 @@ constexpr uint32_t operator"" _hl(const char* str, size_t size) noexcept
 {
 	return hash_lowercase(str, size);
 }
+
+template <>
+struct std::hash<RE::BSFixedString>
+{
+	std::size_t operator()(const RE::BSFixedString& k) const { return RE::BSCRC32<RE::BSFixedString>()(k); }
+};
 
 #include "SimpleIni.h"
 class SettingsBase

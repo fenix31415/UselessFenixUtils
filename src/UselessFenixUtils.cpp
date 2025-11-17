@@ -454,7 +454,7 @@ namespace FenixUtils
 				queue.push_back(node);
 			}
 		}
-		
+
 		MyGraphTraverser::MyGraphTraverser(RE::GET_CHILDREN_FLAGS flags, RE::hkbNode* start) :
 			flags(flags), visited{ start }, queue{ start }
 		{
@@ -466,38 +466,38 @@ namespace FenixUtils
 			assert(!graphs.empty());
 			return graphs.back();
 		}
-		
+
 		RE::hkbNode* MyGraphTraverser::Next()
 		{
 			auto ans = queue.back();
 			queue.pop_back();
-		
+
 			if (ans == nullptr) {
 				if (queue.empty())
 					return nullptr;
-		
+
 				ans = queue.back();
 				queue.pop_back();
-		
+
 				graphs.pop_back();
 			}
-		
-			if (int childs = ans->getMaxNumChildren(flags); childs > 0) {
+
+			if (int32_t childs = ans->getMaxNumChildren(flags); childs > 0) {
 				RE::hkArray<RE::hkbNodeChildInfo> _childs_info;
 				_childs_info.reserve(childs);
 				RE::hkbNode::ChildrenInfo childs_info(_childs_info);
 				ans->getChildren(flags, childs_info);
-		
+
 				if (ans->isGraph()) {
 					graphs.push_back(static_cast<RE::hkbBehaviorGraph*>(ans));
 					queue.push_back(nullptr);
 				}
-		
+
 				for (int32_t i = childs_info.childInfos.size() - 1; i >= 0; --i) {
 					push(childs_info.childInfos[i].node);
 				}
 			}
-		
+
 			return ans;
 		}
 
@@ -546,28 +546,48 @@ namespace FenixUtils
 			}
 			return RE::hkbEventBase::SystemEventIDs_::kNull;
 		}
-		
+
 		const char* get_event_name_internal(RE::hkbBehaviorGraph* graph, int32_t internal_id)
 		{
 			if (internal_id == RE::hkbEventBase::SystemEventIDs_::kNull)
 				return nullptr;
-		
+
+			assert(graph);
+			assert(graph->data);
+			assert(graph->data->stringData);
+
+			if (internal_id >= graph->data->stringData->eventNames.size()) {
+				// assert(false);
+				return nullptr;
+			}
+
 			return graph->data->stringData->eventNames[static_cast<uint32_t>(internal_id)].c_str();
 		}
-		
+
 		const char* get_event_name_external(RE::hkbBehaviorGraph* graph, int32_t external_id)
 		{
 			if (auto map = graph->eventIDMap.get()) {
 				auto internal_id = map->externalToInternalMap.getWithDefault(static_cast<int64_t>(external_id) + 1, -1);
 				return get_event_name_internal(graph, static_cast<int32_t>(internal_id));
 			}
-		
+
 			return nullptr;
 		}
 
 		const char* get_variable_name(RE::hkbBehaviorGraph* graph, int32_t ind)
 		{
 			return graph->data->stringData->variableNames[static_cast<uint32_t>(ind)].c_str();
+		}
+
+		RE::Actor* hkbChar2Char(RE::hkbCharacter& hkbChar)
+		{
+			auto* bshkbgraph = hkbChar2bshkbgraph(hkbChar);
+			return bshkbgraph->holder ? bshkbgraph->holder->As<RE::Actor>() : nullptr;
+		}
+
+		RE::BShkbAnimationGraph* hkbChar2bshkbgraph(RE::hkbCharacter& hkbChar)
+		{
+			return RE::stl::adjust_pointer<RE::BShkbAnimationGraph>(&hkbChar, -0xC0);
 		}
 	}
 
