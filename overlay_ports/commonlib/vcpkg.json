@@ -1,0 +1,26 @@
+{
+    "name": "commonlib",
+    "version-string": "2",
+    "description": "A reverse engineered resource for developing F4SE plugins for Skyrim Special Edition",
+    "homepage": "https://github.com/Ryan-rsm-McKenzie/CommonLibSSE",
+    "license": "MIT",
+    "supports": "windows & x64",
+    "dependencies": [
+		{
+		"name": "vcpkg-cmake-config",
+		"host": true
+	  	},
+      "boost-stl-interfaces",
+      "rsm-binary-io",
+      "spdlog",
+      "magic-enum",
+      "simpleini",
+      "span-lite",
+      "xbyak"
+    ],
+    "features": {
+      "support-ae": {
+      "description": "Skyrim AE support."
+      }
+    }
+}

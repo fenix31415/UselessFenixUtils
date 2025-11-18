@@ -12,5 +12,27 @@
 		"magic-enum",
     "spdlog",
     "xbyak"
-  ]
+  ],
+  "features": {
+    "commonlib-se": {
+      "description": "Build platform for Skyrim SE.",
+      "dependencies": [
+        {
+          "name": "commonlib",
+          "platform": "windows"
+        }
+      ]
+    },
+    "commonlib-ae": {
+      "description": "Build platform for Skyrim AE.",
+      "dependencies": [
+        {
+          "name": "commonlib",
+          "platform": "windows",
+          "default-features": false,
+          "features": ["support-ae"]
+        }
+      ]
+    }
+  }
 }
