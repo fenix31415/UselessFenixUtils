@@ -14,6 +14,16 @@
     "xbyak"
   ],
   "features": {
+    "imgui": {
+      "description": "Build with ImGui utilities",
+      "dependencies": [
+        {
+          "name": "imgui",
+          "platform": "windows",
+          "features": ["dx11-binding", "win32-binding"]
+        }
+      ]
+    },
     "commonlib-se": {
       "description": "Build platform for Skyrim SE.",
       "dependencies": [

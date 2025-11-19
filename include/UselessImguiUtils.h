@@ -1,5 +1,7 @@
 #pragma once
 #define IMGUI_DEFINE_MATH_OPERATORS
+
+#ifdef USELESS_FENIX_UTILS_WITH_IMGUI
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
@@ -653,3 +655,5 @@ namespace ImguiUtils
 		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
 	};
 }
+
+#endif  //  USELESS_FENIX_UTILS_WITH_IMGUI

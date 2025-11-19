@@ -1,11 +1,17 @@
 cmake_minimum_required(VERSION 3.20)
 
 option(SKYRIM_SE "The only one true Skyrim SE (1.5) build" ON)
+option(WITH_IMGUI "Build with ImGui utilities" OFF)
+option(WITH_DRAWING "Build with drawing utilities" OFF)
 
 if(SKYRIM_SE)
   list(APPEND VCPKG_MANIFEST_FEATURES "commonlib-se")
 else()
   list(APPEND VCPKG_MANIFEST_FEATURES "commonlib-ae")
+endif()
+
+if(WITH_IMGUI)
+  list(APPEND VCPKG_MANIFEST_FEATURES "imgui")
 endif()
 
 set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
@@ -74,8 +80,8 @@ set(Boost_USE_STATIC_LIBS ON)
 
 set(SOURCES
 	src/PCH.h
-  include/UselessFenixUtils.h
-  src/UselessFenixUtils.cpp
+	include/UselessFenixUtils.h
+	src/UselessFenixUtils.cpp
 )
 
 if (WITH_IMGUI)
@@ -83,6 +89,7 @@ if (WITH_IMGUI)
 		include/UselessImguiUtils.h
 	)
 endif ()
+
 if (WITH_DRAWING)
 	list(APPEND SOURCES
 		include/UselessDebugRenderUtils.h
@@ -157,6 +164,16 @@ target_link_libraries(
 		magic_enum::magic_enum
 		JsonCpp::JsonCpp
 )
+
+if (WITH_DRAWING)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_DRAWING=1)
+endif ()
+
+if (WITH_IMGUI)
+	find_package(imgui CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_IMGUI=1)
+endif ()
 
 if (MSVC)
 	target_compile_options(${PROJECT_NAME} PRIVATE "-DUNICODE" "-D_UNICODE")
