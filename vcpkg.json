@@ -8,8 +8,8 @@
     "boost-atomic",
     "boost-stl-interfaces",
     "glm",
-		"jsoncpp",
-		"magic-enum",
+    "jsoncpp",
+    "magic-enum",
     "spdlog",
     "xbyak"
   ],
