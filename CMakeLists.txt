@@ -144,8 +144,6 @@ target_include_directories(
 		${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-set(SPDLOG_FMT_EXTERNAL ON)
-
 find_package(CommonLibSSE CONFIG REQUIRED)
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
