@@ -14,7 +14,11 @@
     "xbyak"
   ],
   "features": {
-    "imgui": {
+    "with-drawing": {
+      "description": "Build with drawing utilities",
+      "dependencies": []
+    },
+    "with-imgui": {
       "description": "Build with ImGui utilities",
       "dependencies": [
         {

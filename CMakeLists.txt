@@ -11,7 +11,11 @@ else()
 endif()
 
 if(WITH_IMGUI)
-  list(APPEND VCPKG_MANIFEST_FEATURES "imgui")
+  list(APPEND VCPKG_MANIFEST_FEATURES "with-imgui")
+endif()
+
+if(WITH_DRAWING)
+  list(APPEND VCPKG_MANIFEST_FEATURES "with-drawing")
 endif()
 
 set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
