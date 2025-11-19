@@ -20,11 +20,12 @@
         {
           "name": "imgui",
           "platform": "windows",
-          "features": ["dx11-binding", "win32-binding"]
+          "features": ["dx11-binding", "win32-binding"],
+          "default-features": false
         }
       ]
     },
-    "commonlib-se": {
+    "support-se": {
       "description": "Build platform for Skyrim SE.",
       "dependencies": [
         {
@@ -33,7 +34,7 @@
         }
       ]
     },
-    "commonlib-ae": {
+    "support-ae": {
       "description": "Build platform for Skyrim AE.",
       "dependencies": [
         {

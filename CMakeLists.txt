@@ -5,9 +5,9 @@ option(WITH_IMGUI "Build with ImGui utilities" OFF)
 option(WITH_DRAWING "Build with drawing utilities" OFF)
 
 if(SKYRIM_SE)
-  list(APPEND VCPKG_MANIFEST_FEATURES "commonlib-se")
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-se")
 else()
-  list(APPEND VCPKG_MANIFEST_FEATURES "commonlib-ae")
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-ae")
 endif()
 
 if(WITH_IMGUI)
