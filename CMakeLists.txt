@@ -22,9 +22,6 @@ set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
 
 # ================================================================================
 
-set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
-set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/overlay_ports")
-
 if(NOT EXISTS ${CMAKE_TOOLCHAIN_FILE})
 	if(EXISTS $ENV{VCPKG_ROOT})
 		cmake_path(SET CMAKE_TOOLCHAIN_FILE NORMALIZE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
@@ -32,8 +29,8 @@ if(NOT EXISTS ${CMAKE_TOOLCHAIN_FILE})
 		message(FATAL_ERROR "invalid VCPKG_ROOT")
 	endif()
 	
+	set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
     set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/overlay_ports")
-
 
 	# install deps from vcpkg.json
 	include($ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
