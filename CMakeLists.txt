@@ -124,7 +124,7 @@ add_library(
 	.editorconfig
 )
 
-#add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
+add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
 set_target_properties(
 	${PROJECT_NAME}

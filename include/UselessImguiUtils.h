@@ -1,7 +1,8 @@
 #pragma once
-#define IMGUI_DEFINE_MATH_OPERATORS
 
 #ifdef USELESS_FENIX_UTILS_WITH_IMGUI
+#define IMGUI_DEFINE_MATH_OPERATORS
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
