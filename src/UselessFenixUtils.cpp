@@ -132,7 +132,7 @@ namespace FenixUtils
 			pick_data.rayInput.filterInfo = filter_info;
 
 			RE::PlayerCharacter::GetSingleton()->GetParentCell()->GetbhkWorld()->PickObject(pick_data);
-			
+
 			return pick_data.rayOutput.HasHit() ? from + (to - from) * pick_data.rayOutput.hitFraction : to;
 		}
 
@@ -302,7 +302,7 @@ namespace FenixUtils
 				uint32_t collisionFilterInfo = 0;
 				caster->GetCollisionFilterInfo(collisionFilterInfo);
 				collisionFilterInfo = (static_cast<uint32_t>(collisionFilterInfo >> 16) << 16) |
-				                                static_cast<uint32_t>(RE::COL_LAYER::kCharController);
+				                      static_cast<uint32_t>(RE::COL_LAYER::kCharController);
 
 				return Geom::raycast(ray_start, ray_end, collisionFilterInfo);
 			}
@@ -381,49 +381,54 @@ namespace FenixUtils
 			}
 		}
 
-		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const std::string& field_name)
+		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			auto& point = jobj[field_name];
 			return { point[0].asFloat(), point[1].asFloat(), point[2].asFloat() };
 		}
 
-		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const std::string& field_name)
+		std::optional<RE::NiPoint3> mb_getPoint3(const ::Json::Value& jobj, const char* field_name)
+		{
+			return jobj.isMember(field_name) ? std::optional<RE::NiPoint3>(getPoint3(jobj, field_name)) : std::nullopt;
+		}
+
+		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			auto& point = jobj[field_name];
 			return { point[0].asFloat(), point[1].asFloat() };
 		}
 
-		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const std::string& field_name)
+		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const char* field_name)
 		{
 			return jobj.isMember(field_name) ? getPoint2(jobj, field_name) : RE::Projectile::ProjectileRot{ 0, 0 };
 		}
 
-		std::string getString(const ::Json::Value& jobj, const std::string& field_name)
+		std::string getString(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			return jobj[field_name].asString();
 		}
 
-		std::string mb_getString(const ::Json::Value& jobj, const std::string& field_name)
+		std::optional<std::string> mb_getString(const ::Json::Value& jobj, const char* field_name)
 		{
-			return jobj.isMember(field_name) ? getString(jobj, field_name) : "";
+			return jobj.isMember(field_name) ? std::optional<std::string>{ getString(jobj, field_name) } : std::nullopt;
 		}
 
-		float getFloat(const ::Json::Value& jobj, const std::string& field_name)
+		float getFloat(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			return jobj[field_name].asFloat();
 		}
 
-		bool getBool(const ::Json::Value& jobj, const std::string& field_name)
+		bool getBool(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			return jobj[field_name].asBool();
 		}
 
-		uint32_t getUint32(const ::Json::Value& jobj, const std::string& field_name)
+		uint32_t getUint32(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			return jobj[field_name].asUInt();
@@ -615,7 +620,7 @@ namespace FenixUtils
 			data.push_back(get_point2(points[i]));
 		}
 	}
-	
+
 	namespace IO
 	{
 		void write_string(std::ofstream& file, const std::string_view& sv)

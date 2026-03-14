@@ -1,11 +1,9 @@
 #pragma once
 #define IMGUI_DEFINE_MATH_OPERATORS
-
-#ifdef USELESS_FENIX_UTILS_WITH_IMGUI
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
+#include "imgui_internal.h"
 #include <dxgi.h>
 
 namespace ImguiUtils
@@ -20,7 +18,6 @@ namespace ImguiUtils
 		static inline std::mutex input_lock;
 
 	private:
-
 		static void toggle_IsOpen()
 		{
 			bool is_open_new = !IsOpen.load();
@@ -42,12 +39,13 @@ namespace ImguiUtils
 					if (!b->IsDown() || b->GetDevice() != RE::INPUT_DEVICE::kKeyboard)
 						continue;
 
-					if (is_hide_hotkey(b)) {
-						toggle_IsOpen();
-						update_cursor_status();
-					}
 					if (is_enable_hotkey(b)) {
 						toggle_IsActive();
+						update_cursor_status();
+					}
+					if (is_hide_hotkey(b)) {
+						toggle_IsOpen();
+						IsActive.store(IsOpen.load());
 						update_cursor_status();
 					}
 				}
@@ -621,8 +619,9 @@ namespace ImguiUtils
 		{
 			static RE::InputEvent* dummy = nullptr;
 
+			bool skip1 = skipevents();
 			Process(a_evns);
-			if (skipevents()) {
+			if (skip1) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
 				input_lock.lock();
 				ProcessEvent(a_evns);
@@ -655,5 +654,3 @@ namespace ImguiUtils
 		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
 	};
 }
-
-#endif  //  USELESS_FENIX_UTILS_WITH_IMGUI

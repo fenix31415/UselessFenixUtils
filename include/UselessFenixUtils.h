@@ -8,11 +8,11 @@
 
 #include <glm/glm.hpp>
 
-#include "json/json.h"
 #include "magic_enum/magic_enum.hpp"
+#include "json/json.h"
 
 #ifdef WITH_IMGUI
-#include "UselessImguiUtils.h"
+#	include "UselessImguiUtils.h"
 #endif  // WITH_IMGUI
 #ifdef WITH_DRAWING
 #	include "UselessDebugRenderUtils.h"
@@ -64,7 +64,7 @@ namespace FenixUtils
 		kTorso,
 		kFeet
 	};
-	
+
 	namespace Geom
 	{
 		// Axis: y -- forward, x -- right, z angle = 0 => y = 1, x = 0.
@@ -148,33 +148,29 @@ namespace FenixUtils
 
 		// --- getting values ---
 
-		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const std::string& field_name);
-		template <RE::NiPoint3 default_val = RE::NiPoint3(0, 0, 0)>
-		RE::NiPoint3 mb_getPoint3(const ::Json::Value& jobj, const std::string& field_name)
-		{
-			return jobj.isMember(field_name) ? getPoint3(jobj, field_name) : default_val;
-		}
-		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const std::string& field_name);
-		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const std::string& field_name);
-		std::string getString(const ::Json::Value& jobj, const std::string& field_name);
-		std::string mb_getString(const ::Json::Value& jobj, const std::string& field_name);
-		float getFloat(const ::Json::Value& jobj, const std::string& field_name);
-		
+		RE::NiPoint3 getPoint3(const ::Json::Value& jobj, const char* field_name);
+		std::optional<RE::NiPoint3> mb_getPoint3(const ::Json::Value& jobj, const char* field_name);
+		RE::Projectile::ProjectileRot getPoint2(const ::Json::Value& jobj, const char* field_name);
+		RE::Projectile::ProjectileRot mb_getPoint2(const ::Json::Value& jobj, const char* field_name);
+		std::string getString(const ::Json::Value& jobj, const char* field_name);
+		std::optional<std::string> mb_getString(const ::Json::Value& jobj, const char* field_name);
+		float getFloat(const ::Json::Value& jobj, const char* field_name);
+
 		template <float default_val = 0.0f>
-		float mb_getFloat(const ::Json::Value& jobj, const std::string& field_name)
+		float mb_getFloat(const ::Json::Value& jobj, const char* field_name)
 		{
 			return jobj.isMember(field_name) ? getFloat(jobj, field_name) : default_val;
 		}
 
-		bool getBool(const ::Json::Value& jobj, const std::string& field_name);
+		bool getBool(const ::Json::Value& jobj, const char* field_name);
 
 		template <bool default_val = false>
-		bool mb_getBool(const ::Json::Value& jobj, const std::string& field_name)
+		bool mb_getBool(const ::Json::Value& jobj, const char* field_name)
 		{
 			return jobj.isMember(field_name) ? getBool(jobj, field_name) : default_val;
 		}
 
-		uint32_t getUint32(const ::Json::Value& jobj, const std::string& field_name);
+		uint32_t getUint32(const ::Json::Value& jobj, const char* field_name);
 
 		template <typename Enum>
 		Enum string2enum(const std::string& val)
@@ -191,7 +187,7 @@ namespace FenixUtils
 
 		// Get string data from jobj[field_name] and return enum
 		template <typename Enum>
-		Enum read_enum(const ::Json::Value& jobj, const std::string& field_name)
+		Enum read_enum(const ::Json::Value& jobj, const char* field_name)
 		{
 			assert(jobj.isMember(field_name));
 			return read_enum<Enum>(jobj[field_name]);
@@ -199,7 +195,7 @@ namespace FenixUtils
 
 		// Get data from jobj[field_name], if present, return def otherwise
 		template <auto def>
-		auto mb_read_field(const ::Json::Value& jobj, const std::string& field_name)
+		auto mb_read_field(const ::Json::Value& jobj, const char* field_name)
 		{
 			if constexpr (std::is_same_v<decltype(def), bool>) {
 				if (jobj.isMember(field_name))
@@ -238,16 +234,16 @@ namespace FenixUtils
 			std::set<RE::hkbNode*> visited;
 			std::vector<RE::hkbNode*> queue;
 			std::vector<RE::hkbBehaviorGraph*> graphs{};
-		
+
 			void push(RE::hkbNode* node);
-		
+
 		public:
 			MyGraphTraverser() = delete;
 			MyGraphTraverser(const MyGraphTraverser&) = delete;
 			MyGraphTraverser& operator=(const MyGraphTraverser&) = delete;
-		
+
 			MyGraphTraverser(RE::GET_CHILDREN_FLAGS flags, RE::hkbNode* start);
-		
+
 			RE::hkbBehaviorGraph* cur_graph();
 			RE::hkbNode* Next();
 		};
@@ -271,6 +267,7 @@ namespace FenixUtils
 		float eval(float val);
 
 		void init(const ::Json::Value& points);
+
 	private:
 		std::pair<float, float> get_point2(const ::Json::Value& val) { return { val[0].asFloat(), val[1].asFloat() }; }
 	};
@@ -314,7 +311,8 @@ namespace FenixUtils
 	RE::EffectSetting* getAVEffectSetting(RE::MagicItem* mgitem);
 
 	void damage_stamina_withdelay(RE::Actor* a, float val);
-	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val, RE::Actor* attacker);
+	void damageav_attacker(RE::Actor* victim, RE::ACTOR_VALUE_MODIFIERS::ACTOR_VALUE_MODIFIER i1, RE::ActorValue i2, float val,
+		RE::Actor* attacker);
 	void damageav(RE::Actor* a, RE::ActorValue av, float val);
 	RE::TESObjectWEAP* get_UnarmedWeap();
 	float PlayerCharacter__get_reach(RE::Actor* a);
@@ -339,7 +337,7 @@ namespace FenixUtils
 		victim->NotifyAnimationGraph("staggerStart");
 	}
 
-	template<float min, float max>
+	template <float min, float max>
 	static float lerp(float k)
 	{
 		return min + (max - min) * k;
@@ -347,13 +345,13 @@ namespace FenixUtils
 
 	void play_sound(RE::TESObjectREFR* a, int formid);
 	void play_impact(RE::TESObjectREFR* a, RE::BGSImpactData* impact, RE::NiPoint3* P_V, RE::NiPoint3* P_from, RE::NiNode* bone);
-	bool PlayIdle(RE::AIProcess* proc, RE::Actor* attacker, RE::DEFAULT_OBJECT smth, RE::TESIdleForm* idle, bool a5, bool a6, RE::Actor* target);
+	bool PlayIdle(RE::AIProcess* proc, RE::Actor* attacker, RE::DEFAULT_OBJECT smth, RE::TESIdleForm* idle, bool a5, bool a6,
+		RE::Actor* target);
 	float get_total_av(RE::Actor* a, RE::ActorValue av);
 	bool TESObjectREFR__HasEffectKeyword(RE::TESObjectREFR* a, RE::BGSKeyword* kwd);
-	
+
 	// ignore cells
 	float get_dist2(RE::TESObjectREFR* a, RE::TESObjectREFR* b);
-
 
 	RE::BGSAttackDataPtr get_attackData(RE::Actor* a);
 	bool is_powerattacking(RE::Actor* a);
@@ -486,15 +484,9 @@ constexpr uint32_t hash_lowercase(const char* data, size_t const size) noexcept
 	return hash;
 }
 
-constexpr uint32_t operator"" _h(const char* str, size_t size) noexcept
-{
-	return hash(str, size);
-}
+constexpr uint32_t operator"" _h(const char* str, size_t size) noexcept { return hash(str, size); }
 
-constexpr uint32_t operator"" _hl(const char* str, size_t size) noexcept
-{
-	return hash_lowercase(str, size);
-}
+constexpr uint32_t operator"" _hl(const char* str, size_t size) noexcept { return hash_lowercase(str, size); }
 
 template <>
 struct std::hash<RE::BSFixedString>
