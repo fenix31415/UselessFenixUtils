@@ -39,6 +39,16 @@ namespace ImguiUtils
 					if (!b->IsDown() || b->GetDevice() != RE::INPUT_DEVICE::kKeyboard)
 						continue;
 
+					//if (is_enable_hotkey(b)) {
+					//	toggle_IsActive();
+					//	update_cursor_status();
+					//}
+					//if (is_hide_hotkey(b)) {
+					//	toggle_IsOpen();
+					//	IsActive.store(IsOpen.load());
+					//	update_cursor_status();
+					//}
+
 					if (is_enable_hotkey(b)) {
 						toggle_IsActive();
 						update_cursor_status();
@@ -619,9 +629,10 @@ namespace ImguiUtils
 		{
 			static RE::InputEvent* dummy = nullptr;
 
-			bool skip1 = skipevents();
+			//bool skip1 = skipevents();
 			Process(a_evns);
-			if (skip1) {
+			if (skipevents()) {
+			//if (skip1) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
 				input_lock.lock();
 				ProcessEvent(a_evns);
