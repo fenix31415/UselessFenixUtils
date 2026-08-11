@@ -1,7 +1,8 @@
 #pragma once
-#define IMGUI_DEFINE_MATH_OPERATORS
 
 #ifdef USELESS_FENIX_UTILS_WITH_IMGUI
+#define IMGUI_DEFINE_MATH_OPERATORS
+
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
@@ -19,14 +20,38 @@ namespace ImguiUtils
 
 		static inline std::mutex input_lock;
 
+		static inline ImGuiContext* drawImguiCtx = nullptr;
+
+		struct ContextGuard {
+			ImGuiContext* prev;
+			explicit ContextGuard(ImGuiContext* ctx) :
+				prev(ImGui::GetCurrentContext())
+			{
+				if (ctx) {
+					ImGui::SetCurrentContext(ctx);
+				}
+			}
+			~ContextGuard() { ImGui::SetCurrentContext(prev); }
+			ContextGuard(const ContextGuard&) = delete;
+			ContextGuard& operator=(const ContextGuard&) = delete;
+		};
+
+		static void SetAsCurrent()
+		{
+			if (drawImguiCtx) {
+				ImGui::SetCurrentContext(drawImguiCtx);
+			}
+		}
+
 	private:
 
 		static void toggle_IsOpen()
 		{
 			bool is_open_new = !IsOpen.load();
 			IsOpen = is_open_new;
-			if (is_open_new)
+			if (is_open_new) {
 				IsActive = false;
+			}
 		}
 		static void toggle_IsActive() { IsActive = !IsActive.load(); }
 
@@ -34,13 +59,15 @@ namespace ImguiUtils
 
 		static void Process(RE::InputEvent* const* evns)
 		{
-			if (!*evns)
+			if (!*evns) {
 				return;
+			}
 
 			for (RE::InputEvent* e = *evns; e; e = e->next) {
 				if (auto b = e->AsButtonEvent()) {
-					if (!b->IsDown() || b->GetDevice() != RE::INPUT_DEVICE::kKeyboard)
+					if (!b->IsDown() || b->GetDevice() != RE::INPUT_DEVICE::kKeyboard) {
 						continue;
+					}
 
 					if (is_hide_hotkey(b)) {
 						toggle_IsOpen();
@@ -66,6 +93,24 @@ namespace ImguiUtils
 			Hook();
 		}
 
+		static void Shutdown()
+		{
+			if (!drawImguiCtx) {
+				return;
+			}
+
+			ImGuiContext* const ctx = drawImguiCtx;
+			ImGuiContext* const prev = ImGui::GetCurrentContext();
+			ImGui::SetCurrentContext(ctx);
+
+			ImGui_ImplDX11_Shutdown();
+			ImGui_ImplWin32_Shutdown();
+			ImGui::DestroyContext(ctx);
+			drawImguiCtx = nullptr;
+
+			ImGui::SetCurrentContext(prev == ctx ? nullptr : prev);
+		}
+
 	private:
 		static void Hook()
 		{
@@ -86,7 +131,8 @@ namespace ImguiUtils
 			DXGI_SWAP_CHAIN_DESC sd{};
 			swapChain->GetDesc(&sd);
 
-			ImGui::CreateContext();
+			drawImguiCtx = ImGui::CreateContext();
+			ContextGuard guard(drawImguiCtx);
 
 			auto& io = ImGui::GetIO();
 			io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
@@ -108,6 +154,8 @@ namespace ImguiUtils
 
 		static void new_frame()
 		{
+			ContextGuard guard(drawImguiCtx);
+
 			ImGui_ImplWin32_NewFrame();
 			ImGui_ImplDX11_NewFrame();
 			{
@@ -578,6 +626,8 @@ namespace ImguiUtils
 
 		static void ProcessEvent(RE::InputEvent** a_event)
 		{
+			ContextGuard guard(drawImguiCtx);
+
 			auto& io = ImGui::GetIO();
 
 			for (auto event = *a_event; event; event = event->next) {
@@ -621,7 +671,10 @@ namespace ImguiUtils
 		{
 			static RE::InputEvent* dummy = nullptr;
 
-			Process(a_evns);
+			{
+				ContextGuard guard(drawImguiCtx);
+				Process(a_evns);
+			}
 			if (skipevents()) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
 				input_lock.lock();
@@ -634,6 +687,8 @@ namespace ImguiUtils
 
 		static LRESULT WndProcHook__thunk(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		{
+			ContextGuard guard(drawImguiCtx);
+
 			auto& io = ImGui::GetIO();
 			if (uMsg == WM_KILLFOCUS) {
 				io.ClearInputCharacters();

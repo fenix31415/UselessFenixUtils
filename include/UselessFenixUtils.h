@@ -11,12 +11,13 @@
 #include "json/json.h"
 #include "magic_enum/magic_enum.hpp"
 
-#ifdef WITH_IMGUI
+#ifdef USELESS_FENIX_UTILS_WITH_IMGUI
 #include "UselessImguiUtils.h"
-#endif  // WITH_IMGUI
-#ifdef WITH_DRAWING
-#	include "UselessDebugRenderUtils.h"
-#endif  // WITH_DRAWING
+#endif  // USELESS_FENIX_UTILS_WITH_IMGUI
+
+#ifdef USELESS_FENIX_UTILS_WITH_DRAWING
+#include "UselessDebugRenderUtils.h"
+#endif  // USELESS_FENIX_UTILS_WITH_DRAWING
 
 namespace FenixUtils
 {
