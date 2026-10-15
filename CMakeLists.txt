@@ -1,5 +1,15 @@
 cmake_minimum_required(VERSION 3.20)
 
+option(SKYRIM_SE "The only one true Skyrim SE (1.5) build" ON)
+option(WITH_IMGUI "Build with ImGui utilities" OFF)
+option(WITH_DRAWING "Build with drawing utilities" OFF)
+
+if(SKYRIM_SE)
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-se")
+else()
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-ae")
+endif()
+
 if(NOT CMAKE_TOOLCHAIN_FILE)
     if(NOT DEFINED ENV{VCPKG_ROOT} OR "$ENV{VCPKG_ROOT}" STREQUAL "")
         message(FATAL_ERROR
@@ -45,18 +55,6 @@ configure_file(
 )
 
 # ---- Globals ----
-
-if (MSVC)
-	add_compile_definitions(
-		_UNICODE
-	)
-
-	if (NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
-		add_compile_options(
-			/MP	# Build with Multiple Processes
-		)
-	endif ()
-endif ()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
@@ -140,11 +138,23 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
-    magic_enum::magic_enum
+		magic_enum::magic_enum
 		JsonCpp::JsonCpp
 )
 
+if (WITH_DRAWING)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_DRAWING=1)
+endif ()
+
+if (WITH_IMGUI)
+	find_package(imgui CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_IMGUI=1)
+endif ()
+
 if (MSVC)
+	target_compile_options(${PROJECT_NAME} PRIVATE "-DUNICODE" "-D_UNICODE")
+
 	target_compile_options(
 		${PROJECT_NAME}
 		PRIVATE
@@ -202,30 +212,41 @@ target_precompile_headers(
 		src/PCH.h
 )
 
-install(
-    TARGETS "${PROJECT_NAME}"
-    EXPORT "${PROJECT_NAME}-targets"
+# Install the library and its export
+install(TARGETS ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}-export
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/${PROJECT_NAME}
 )
 
+# Install header files
 install(
-    EXPORT "${PROJECT_NAME}-targets"
-    NAMESPACE "${PROJECT_NAME}::"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
+    FILES_MATCHING PATTERN "*.h"
 )
 
-configure_file(
-    cmake/UselessFenixUtils-config.cmake.in
-    "${PROJECT_NAME}Config.cmake"
-    @ONLY
+# Package config for find_package
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/UselessFenixUtils-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
 )
 
+# Install the config file
 install(
-    FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
+    DESTINATION
+        ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
 )
 
+# Install the exported targets
 install(
-    DIRECTORY
-        "include/"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/UselessFenixUtils"
+    EXPORT ${PROJECT_NAME}-export
+    NAMESPACE ${PROJECT_NAME}::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+    FILE UselessFenixUtils-targets.cmake
 )
