@@ -1,11 +1,9 @@
 #pragma once
 #define IMGUI_DEFINE_MATH_OPERATORS
-
-#ifdef USELESS_FENIX_UTILS_WITH_IMGUI
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
+#include "imgui_internal.h"
 #include <dxgi.h>
 
 namespace ImguiUtils
@@ -20,7 +18,6 @@ namespace ImguiUtils
 		static inline std::mutex input_lock;
 
 	private:
-
 		static void toggle_IsOpen()
 		{
 			bool is_open_new = !IsOpen.load();
@@ -42,12 +39,23 @@ namespace ImguiUtils
 					if (!b->IsDown() || b->GetDevice() != RE::INPUT_DEVICE::kKeyboard)
 						continue;
 
-					if (is_hide_hotkey(b)) {
-						toggle_IsOpen();
-						update_cursor_status();
-					}
+					//if (is_enable_hotkey(b)) {
+					//	toggle_IsActive();
+					//	update_cursor_status();
+					//}
+					//if (is_hide_hotkey(b)) {
+					//	toggle_IsOpen();
+					//	IsActive.store(IsOpen.load());
+					//	update_cursor_status();
+					//}
+
 					if (is_enable_hotkey(b)) {
 						toggle_IsActive();
+						update_cursor_status();
+					}
+					if (is_hide_hotkey(b)) {
+						toggle_IsOpen();
+						IsActive.store(IsOpen.load());
 						update_cursor_status();
 					}
 				}
@@ -388,21 +396,21 @@ namespace ImguiUtils
 			case RE::BSKeyboardDevice::Key::kEscape:
 				return ImGuiKey_Escape;
 			case RE::BSKeyboardDevice::Key::kLeftControl:
-				return ImGuiKey_ModCtrl;
+				return ImGuiMod_Ctrl;
 			case RE::BSKeyboardDevice::Key::kLeftShift:
-				return ImGuiKey_ModShift;
+				return ImGuiMod_Shift;
 			case RE::BSKeyboardDevice::Key::kLeftAlt:
-				return ImGuiKey_ModAlt;
+				return ImGuiMod_Alt;
 			case RE::BSKeyboardDevice::Key::kLeftWin:
-				return ImGuiKey_ModSuper;
+				return ImGuiMod_Super;
 			case RE::BSKeyboardDevice::Key::kRightControl:
-				return ImGuiKey_ModCtrl;
+				return ImGuiMod_Ctrl;
 			case RE::BSKeyboardDevice::Key::kRightShift:
-				return ImGuiKey_ModShift;
+				return ImGuiMod_Shift;
 			case RE::BSKeyboardDevice::Key::kRightAlt:
-				return ImGuiKey_ModAlt;
+				return ImGuiMod_Alt;
 			case RE::BSKeyboardDevice::Key::kRightWin:
-				return ImGuiKey_ModSuper;
+				return ImGuiMod_Super;
 			// Skip 535
 			case RE::BSKeyboardDevice::Key::kNum0:
 				return ImGuiKey_0;
@@ -621,8 +629,10 @@ namespace ImguiUtils
 		{
 			static RE::InputEvent* dummy = nullptr;
 
+			//bool skip1 = skipevents();
 			Process(a_evns);
 			if (skipevents()) {
+			//if (skip1) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
 				input_lock.lock();
 				ProcessEvent(a_evns);
@@ -636,7 +646,6 @@ namespace ImguiUtils
 		{
 			auto& io = ImGui::GetIO();
 			if (uMsg == WM_KILLFOCUS) {
-				io.ClearInputCharacters();
 				io.ClearInputKeys();
 			}
 
@@ -655,5 +664,3 @@ namespace ImguiUtils
 		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
 	};
 }
-
-#endif  //  USELESS_FENIX_UTILS_WITH_IMGUI

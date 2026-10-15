@@ -1,45 +1,24 @@
 cmake_minimum_required(VERSION 3.20)
 
-option(SKYRIM_SE "The only one true Skyrim SE (1.5) build" ON)
-option(WITH_IMGUI "Build with ImGui utilities" OFF)
-option(WITH_DRAWING "Build with drawing utilities" OFF)
+macro(set_from_environment VARIABLE)
+	if (NOT DEFINED ${VARIABLE} AND DEFINED ENV{${VARIABLE}})
+		set(${VARIABLE} $ENV{${VARIABLE}})
+	endif ()
+endmacro()
 
-if(SKYRIM_SE)
-  list(APPEND VCPKG_MANIFEST_FEATURES "support-se")
-else()
-  list(APPEND VCPKG_MANIFEST_FEATURES "support-ae")
-endif()
+set_from_environment(VCPKG_ROOT)
 
-if(WITH_IMGUI)
-  list(APPEND VCPKG_MANIFEST_FEATURES "with-imgui")
-endif()
-
-if(WITH_DRAWING)
-  list(APPEND VCPKG_MANIFEST_FEATURES "with-drawing")
-endif()
+if (DEFINED VCPKG_ROOT)
+	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
+else ()
+	message(FATAL_ERROR	"Variable VCPKG_ROOT is not set")
+endif ()
 
 set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
 
-# ================================================================================
-
-if(NOT EXISTS ${CMAKE_TOOLCHAIN_FILE})
-	if(EXISTS $ENV{VCPKG_ROOT})
-		cmake_path(SET CMAKE_TOOLCHAIN_FILE NORMALIZE $ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
-	else()
-		message(FATAL_ERROR "invalid VCPKG_ROOT")
-	endif()
-	
-	set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
-    set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_LIST_DIR}/overlay_ports")
-
-	# install deps from vcpkg.json
-	include($ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
-endif()
-
-message("CMAKE_TOOLCHAIN_FILE = ${CMAKE_TOOLCHAIN_FILE}")
-
-# ================================================================================
-# Project
+# ---- Project ----
 
 project(
 	UselessFenixUtils
@@ -72,17 +51,35 @@ endif()
 
 # ---- Globals ----
 
+if (MSVC)
+	add_compile_definitions(
+		_UNICODE
+	)
+
+	if (NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
+		add_compile_options(
+			/MP	# Build with Multiple Processes
+		)
+	endif ()
+endif ()
+
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
 
+add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
+
+find_package(spdlog REQUIRED CONFIG)
+find_package(jsoncpp REQUIRED CONFIG)
+find_package(magic_enum CONFIG REQUIRED)
+
 # ---- Add source files ----
 
 set(SOURCES
 	src/PCH.h
-	include/UselessFenixUtils.h
-	src/UselessFenixUtils.cpp
+  include/UselessFenixUtils.h
+  src/UselessFenixUtils.cpp
 )
 
 if (WITH_IMGUI)
@@ -90,7 +87,6 @@ if (WITH_IMGUI)
 		include/UselessImguiUtils.h
 	)
 endif ()
-
 if (WITH_DRAWING)
 	list(APPEND SOURCES
 		include/UselessDebugRenderUtils.h
@@ -124,14 +120,7 @@ add_library(
 	.editorconfig
 )
 
-#add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
-
-set_target_properties(
-	${PROJECT_NAME}
-	PROPERTIES
-	MSVC_RUNTIME_LIBRARY
-		"MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
-)
+add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
 target_compile_features(
 	${PROJECT_NAME}
@@ -142,43 +131,26 @@ target_compile_features(
 target_include_directories(
 	${PROJECT_NAME}
 	PUBLIC
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/render>
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/utilities>
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/Havok>
-		$<INSTALL_INTERFACE:include>
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/render>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/utilities>"
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/Havok>"
+		"$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}/include
 		${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
-find_package(CommonLibSSE CONFIG REQUIRED)
-find_package(spdlog REQUIRED CONFIG)
-find_package(jsoncpp REQUIRED CONFIG)
-find_package(magic_enum CONFIG REQUIRED)
 
 target_link_libraries(
 	${PROJECT_NAME}
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
-		magic_enum::magic_enum
+    magic_enum::magic_enum
 		JsonCpp::JsonCpp
 )
 
-if (WITH_DRAWING)
-	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_DRAWING=1)
-endif ()
-
-if (WITH_IMGUI)
-	find_package(imgui CONFIG REQUIRED)
-	target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
-	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_IMGUI=1)
-endif ()
-
 if (MSVC)
-	target_compile_options(${PROJECT_NAME} PRIVATE "-DUNICODE" "-D_UNICODE")
-
 	target_compile_options(
 		${PROJECT_NAME}
 		PRIVATE
@@ -220,16 +192,6 @@ if (MSVC)
 			"$<$<CONFIG:RELEASE>:/Zc:inline;/JMC-;/Ob3>"
 	)
 
-	if (MSVC)
-		if (NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
-			target_compile_options(
-				${PROJECT_NAME}
-				PRIVATE
-					/MP	# Build with Multiple Processes
-			)
-		endif ()
-	endif ()
-
 	target_link_options(
 		${PROJECT_NAME}
 		PRIVATE
@@ -245,43 +207,3 @@ target_precompile_headers(
 	PRIVATE
 		src/PCH.h
 )
-
-# Установка библиотек и экспорт
-install(TARGETS ${PROJECT_NAME}
-    EXPORT ${PROJECT_NAME}-export
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/${PROJECT_NAME}
-)
-
-# Установка заголовочных файлов
-install(
-    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
-    FILES_MATCHING PATTERN "*.h"
-)
-
-# Конфигурация пакета для find_package
-include(CMakePackageConfigHelpers)
-configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/UselessFenixUtils-config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-)
-
-# Установка файла конфигурации
-install(
-    FILES 
-        ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
-    DESTINATION 
-        ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-)
-
-# Установка экспорта целей
-install(
-    EXPORT ${PROJECT_NAME}-export
-    NAMESPACE ${PROJECT_NAME}::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
-    FILE UselessFenixUtils-targets.cmake
-)
-
