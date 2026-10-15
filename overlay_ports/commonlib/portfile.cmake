@@ -1,9 +1,8 @@
-vcpkg_from_github(
+vcpkg_from_git(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO fenix31415/CommonLibSSE
-    REF 74694d16f550cdf835f364e37e94fc7dd7372cfc
-    SHA512 c13092aa91a86d6282ef56375b7ed1375cd7b379a50a1ecaad864dc71bbe434d765fdc4178e0d542a8fda46a3869fe5b760ca96f538c4e406fa0814c04e5193f
-    HEAD_REF dev
+    URL git@gitlab.com:skyrp-group/skyrp-commonlib.git
+    REF 31d9068c5a6b6305f81b31d9a643cf26d9d38191
+    HEAD_REF main
 )
 
 set(OPTIONS "")
@@ -16,6 +15,7 @@ message(STATUS "Building commonlib with OPTIONS: `${FEATURE_OPTIONS}`")
 
 vcpkg_configure_cmake(
   SOURCE_PATH ${SOURCE_PATH}
+  PREFER_NINJA
   OPTIONS
       ${OPTIONS}
 )

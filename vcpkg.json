@@ -5,6 +5,7 @@
   "homepage": "https://github.com/fenix31415",
   "license": "MIT",
   "dependencies": [
+    "commonlib",
     "boost-atomic",
     "boost-stl-interfaces",
     "glm",

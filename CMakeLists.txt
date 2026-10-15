@@ -1,24 +1,28 @@
 cmake_minimum_required(VERSION 3.20)
 
-macro(set_from_environment VARIABLE)
-	if (NOT DEFINED ${VARIABLE} AND DEFINED ENV{${VARIABLE}})
-		set(${VARIABLE} $ENV{${VARIABLE}})
-	endif ()
-endmacro()
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    if(NOT DEFINED ENV{VCPKG_ROOT} OR "$ENV{VCPKG_ROOT}" STREQUAL "")
+        message(FATAL_ERROR
+            "VCPKG_ROOT is not set; export it to the vcpkg clone "
+            "(scripts/buildsystems/vcpkg.cmake lives there)"
+        )
+    endif()
+    file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" _vcpkg_root)
+    set(ENV{VCPKG_ROOT} "${_vcpkg_root}")
+    set(CMAKE_TOOLCHAIN_FILE "${_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+endif()
 
-set_from_environment(VCPKG_ROOT)
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static-md" CACHE STRING "vcpkg target triplet")
+endif()
 
-if (DEFINED VCPKG_ROOT)
-	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
-else ()
-	message(FATAL_ERROR	"Variable VCPKG_ROOT is not set")
-endif ()
+if(NOT VCPKG_OVERLAY_PORTS)
+  set(VCPKG_OVERLAY_PORTS "${CMAKE_SOURCE_DIR}/overlay_ports/" CACHE PATH "")
+endif()
 
-set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
-
-# ---- Project ----
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 project(
 	UselessFenixUtils
@@ -40,15 +44,6 @@ configure_file(
 	@ONLY
 )
 
-# ---- Include guards ----
-
-if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-	message(
-		FATAL_ERROR
-			"In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there."
-	)
-endif()
-
 # ---- Globals ----
 
 if (MSVC)
@@ -68,8 +63,7 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
-
+find_package(CommonLibSSE CONFIG REQUIRED)
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
 find_package(magic_enum CONFIG REQUIRED)
