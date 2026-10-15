@@ -240,15 +240,19 @@ install(
 	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )
 
-#install(
-#	FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-#	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
-#)
+configure_file(
+	cmake/config.cmake.in
+	"${PROJECT_NAME}Config.cmake"
+	@ONLY
+)
 
-#install(
-#	DIRECTORY
-#		"include/RE"
-#		"include/REL"
-#		"include/SKSE"
-#	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-#)
+install(
+	FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+)
+
+install(
+	DIRECTORY
+		"include"
+	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+)
