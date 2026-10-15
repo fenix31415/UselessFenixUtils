@@ -1,5 +1,8 @@
 #pragma once
 
+#ifdef USELESS_FENIX_UTILS_WITH_DRAWING
+#include <glm/glm.hpp>
+
 namespace DebugRenderUtils
 {
 	class UpdateHooks
@@ -64,3 +67,5 @@ namespace DebugRenderUtils
 	}
 }
 using namespace DebugRenderUtils::DrawDebug;
+
+#endif
