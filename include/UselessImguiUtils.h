@@ -721,3 +721,5 @@ namespace ImguiUtils
 		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
 	};
 }
+
+#endif  //  USELESS_FENIX_UTILS_WITH_IMGUI
