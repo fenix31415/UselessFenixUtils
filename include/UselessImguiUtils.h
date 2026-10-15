@@ -720,3 +720,5 @@ namespace ImguiUtils
 		static inline REL::Relocation<decltype(DispatchInputEvent)> _DispatchInputEvent;
 	};
 }
+
+#endif

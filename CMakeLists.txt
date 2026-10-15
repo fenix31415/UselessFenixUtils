@@ -122,12 +122,12 @@ add_library(
 
 add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
-set_target_properties(
-	${PROJECT_NAME}
-	PROPERTIES
-	MSVC_RUNTIME_LIBRARY
-		"MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
-)
+#set_target_properties(
+#	${PROJECT_NAME}
+#	PROPERTIES
+#	MSVC_RUNTIME_LIBRARY
+#		"MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+#)
 
 target_compile_features(
 	${PROJECT_NAME}

@@ -68,3 +68,4 @@ namespace DebugRenderUtils
 	}
 }
 using namespace DebugRenderUtils::DrawDebug;
+#endif
