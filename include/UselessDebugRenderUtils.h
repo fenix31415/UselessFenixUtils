@@ -69,3 +69,4 @@ namespace DebugRenderUtils
 using namespace DebugRenderUtils::DrawDebug;
 
 #endif // USELESS_FENIX_UTILS_WITH_DRAWING
+
