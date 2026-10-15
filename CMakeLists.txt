@@ -1,19 +1,39 @@
 cmake_minimum_required(VERSION 3.20)
 
-macro(set_from_environment VARIABLE)
-	if (NOT DEFINED ${VARIABLE} AND DEFINED ENV{${VARIABLE}})
-		set(${VARIABLE} $ENV{${VARIABLE}})
-	endif ()
-endmacro()
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    if(NOT DEFINED ENV{VCPKG_ROOT} OR "$ENV{VCPKG_ROOT}" STREQUAL "")
+        message(FATAL_ERROR
+            "VCPKG_ROOT is not set; export it to the vcpkg clone "
+            "(scripts/buildsystems/vcpkg.cmake lives there)"
+        )
+    endif()
+    file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" _vcpkg_root)
+    set(ENV{VCPKG_ROOT} "${_vcpkg_root}")
+    set(CMAKE_TOOLCHAIN_FILE "${_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+endif()
 
-set_from_environment(VCPKG_ROOT)
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    if(CMAKE_HOST_WIN32)
+        set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "vcpkg target triplet")
+    else()
+        set(VCPKG_TARGET_TRIPLET "x64-linux" CACHE STRING "vcpkg target triplet")
+    endif()
+endif()
 
-if (DEFINED VCPKG_ROOT)
-	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
-else ()
-	message(FATAL_ERROR	"Variable VCPKG_ROOT is not set")
-endif ()
+#macro(set_from_environment VARIABLE)
+#	if (NOT DEFINED ${VARIABLE} AND DEFINED ENV{${VARIABLE}})
+#		set(${VARIABLE} $ENV{${VARIABLE}})
+#	endif ()
+#endmacro()
+#
+#set_from_environment(VCPKG_ROOT)
+
+#if (DEFINED VCPKG_ROOT)
+#	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+#	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
+#else ()
+#	message(FATAL_ERROR	"Variable VCPKG_ROOT is not set")
+#endif ()
 
 set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
@@ -68,8 +88,9 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
+#add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 
+find_package(CommonLibSSE REQUIRED CONFIG)
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
 find_package(magic_enum CONFIG REQUIRED)
