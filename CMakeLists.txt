@@ -259,6 +259,6 @@ install(
 
 install(
 	DIRECTORY
-		"include"
+		"include/"
 	DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/UselessFenixUtils"
 )
