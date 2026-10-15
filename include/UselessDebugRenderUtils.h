@@ -23,9 +23,9 @@ namespace DebugRenderUtils
 			static constexpr glm::vec4 BLU = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f);
 		}
 
-		void draw_text(const RE::NiPoint3& position, const std::string& text, glm::vec4 color, float duration, float size = 0.05f,
-			bool drawOnTop = false);
-		void draw_text0(const RE::NiPoint3& position, const std::string& text, glm::vec4 color, float size = 0.05f,
+		void draw_text(const RE::NiPoint3& position, const std::string& text, glm::vec4 color = Colors::RED, float duration = 3.0f,
+			float size = 0.05f, bool drawOnTop = false);
+		void draw_text0(const RE::NiPoint3& position, const std::string& text, glm::vec4 color = Colors::RED, float size = 0.05f,
 			bool drawOnTop = false);
 		void draw_text_norm(const RE::NiPoint3& position, const RE::NiPoint3& normal, const std::string& text, glm::vec4 color,
 			float duration, float size = 0.05f, bool drawOnTop = false);

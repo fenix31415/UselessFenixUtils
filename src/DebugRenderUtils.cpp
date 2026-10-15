@@ -512,52 +512,53 @@ namespace DebugRenderUtils
 	static inline REL::Relocation<decltype(Present)> fnPresentOrig;
 	HRESULT Present(IDXGISwapChain* swapChain, UINT syncInterval, UINT flags)
 	{
-		// Save some context state to restore later
-		winrt::com_ptr<ID3D11DepthStencilState> gameDSState;
-		uint32_t gameStencilRef;
-		gameContext.context->OMGetDepthStencilState(gameDSState.put(), &gameStencilRef);
+		if (gameContext.context) {
+			// Save some context state to restore later
+			winrt::com_ptr<ID3D11DepthStencilState> gameDSState;
+			uint32_t gameStencilRef;
+			gameContext.context->OMGetDepthStencilState(gameDSState.put(), &gameStencilRef);
 
-		winrt::com_ptr<ID3D11BlendState> gameBlendState;
-		float gameBlendFactors[4];
-		uint32_t gameSampleMask;
-		gameContext.context->OMGetBlendState(gameBlendState.put(), gameBlendFactors, &gameSampleMask);
+			winrt::com_ptr<ID3D11BlendState> gameBlendState;
+			float gameBlendFactors[4];
+			uint32_t gameSampleMask;
+			gameContext.context->OMGetBlendState(gameBlendState.put(), gameBlendFactors, &gameSampleMask);
 
-		D3D11_VIEWPORT gamePort;
-		uint32_t numPorts = 1;
-		gameContext.context->RSGetViewports(&numPorts, &gamePort);
+			D3D11_VIEWPORT gamePort;
+			uint32_t numPorts = 1;
+			gameContext.context->RSGetViewports(&numPorts, &gamePort);
 
-		D3D11_VIEWPORT port;
-		port.TopLeftX = gamePort.TopLeftX;
-		port.TopLeftY = gamePort.TopLeftY;
-		port.Width = gamePort.Width;
-		port.Height = gamePort.Height;
-		port.MinDepth = 0;
-		port.MaxDepth = 1;
-		gameContext.context->RSSetViewports(1, &port);
+			D3D11_VIEWPORT port;
+			port.TopLeftX = gamePort.TopLeftX;
+			port.TopLeftY = gamePort.TopLeftY;
+			port.Width = gamePort.Width;
+			port.Height = gamePort.Height;
+			port.MinDepth = 0;
+			port.MaxDepth = 1;
+			gameContext.context->RSSetViewports(1, &port);
 
-		winrt::com_ptr<ID3D11RasterizerState> rasterState;
-		gameContext.context->RSGetState(rasterState.put());
+			winrt::com_ptr<ID3D11RasterizerState> rasterState;
+			gameContext.context->RSGetState(rasterState.put());
 
-		gameContext.context->OMGetRenderTargets(1, d3dObjects.gameRTV.put(), d3dObjects.depthStencilView.put());
+			gameContext.context->OMGetRenderTargets(1, d3dObjects.gameRTV.put(), d3dObjects.depthStencilView.put());
 
-		{
-			for (auto& cb : presentCallbacks) cb(gameContext);
+			{
+				for (auto& cb : presentCallbacks) cb(gameContext);
 
-			auto color = d3dObjects.gameRTV.get();
-			gameContext.context->OMSetRenderTargets(1, &color, d3dObjects.depthStencilView.get());
+				auto color = d3dObjects.gameRTV.get();
+				gameContext.context->OMSetRenderTargets(1, &color, d3dObjects.depthStencilView.get());
+			}
+
+			// Put things back the way we found it
+			auto ptrRTV = d3dObjects.gameRTV.get();
+			gameContext.context->OMSetRenderTargets(1, &ptrRTV, d3dObjects.depthStencilView.get());
+			gameContext.context->RSSetState(rasterState.get());
+			gameContext.context->RSSetViewports(1, &gamePort);
+			gameContext.context->OMSetBlendState(gameBlendState.get(), gameBlendFactors, gameSampleMask);
+			gameContext.context->OMSetDepthStencilState(gameDSState.get(), gameStencilRef);
+
+			d3dObjects.depthStencilView = nullptr;
+			d3dObjects.gameRTV = nullptr;
 		}
-
-		// Put things back the way we found it
-		auto ptrRTV = d3dObjects.gameRTV.get();
-		gameContext.context->OMSetRenderTargets(1, &ptrRTV, d3dObjects.depthStencilView.get());
-		gameContext.context->RSSetState(rasterState.get());
-		gameContext.context->RSSetViewports(1, &gamePort);
-		gameContext.context->OMSetBlendState(gameBlendState.get(), gameBlendFactors, gameSampleMask);
-		gameContext.context->OMSetDepthStencilState(gameDSState.get(), gameStencilRef);
-
-		d3dObjects.depthStencilView = nullptr;
-		d3dObjects.gameRTV = nullptr;
-
 		//return reinterpret_cast<Render::D3D11Present>(origVFuncs_D3D[8])(swapChain, syncInterval, flags);
 		return fnPresentOrig(swapChain, syncInterval, flags);
 	}
@@ -2107,7 +2108,8 @@ PS_OUTPUT main(PS_INPUT input) {
 
 	namespace DrawDebug
 	{
-		[[maybe_unused]] static void draw_text_plane(const RE::NiPoint3& position, const RE::NiPoint3& normal, float duration, bool drawOnTop)
+		[[maybe_unused]] static void draw_text_plane(const RE::NiPoint3& position, const RE::NiPoint3& normal, float duration,
+			bool drawOnTop)
 		{
 			RE::NiPoint3 normal_dir = normal;
 			normal_dir.Unitize();
@@ -2135,7 +2137,7 @@ PS_OUTPUT main(PS_INPUT input) {
 
 			draw_line(position + right_dir * w, position - right_dir * w, Colors::GRN, duration, drawOnTop);
 		}
-		
+
 		void draw_text(const RE::NiPoint3& position, const std::string& text, glm::vec4 color, float size, float duration,
 			bool drawOnTop)
 		{

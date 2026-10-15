@@ -53,78 +53,9 @@ namespace FenixUtils
 {
 	namespace Geom
 	{
-		RE::NiPoint3 HK2NI(RE::hkVector4 const& val)
-		{
-			RE::NiPoint3 ans = { val.quad.m128_f32[0], val.quad.m128_f32[1], val.quad.m128_f32[2] };
-			ans *= RE::bhkWorld::GetWorldScaleInverse();
-			return ans;
-		}
-
-		RE::NiTransform HK2NI(RE::hkTransform const& val)
-		{
-			RE::NiTransform result;
-
-			result.rotate = HK2NI(val.rotation);
-			result.translate = HK2NI(val.translation);
-			result.scale = 1.0f;
-
-			return result;
-		}
-
-		RE::NiMatrix3 HK2NI(RE::hkMatrix3 const& val)
-		{
-			RE::NiMatrix3 ans;
-
-			ans.entry[0][0] = val.col0.quad.m128_f32[0];
-			ans.entry[1][0] = val.col0.quad.m128_f32[1];
-			ans.entry[2][0] = val.col0.quad.m128_f32[2];
-
-			ans.entry[0][1] = val.col1.quad.m128_f32[0];
-			ans.entry[1][1] = val.col1.quad.m128_f32[1];
-			ans.entry[2][1] = val.col1.quad.m128_f32[2];
-
-			ans.entry[0][2] = val.col2.quad.m128_f32[0];
-			ans.entry[1][2] = val.col2.quad.m128_f32[1];
-			ans.entry[2][2] = val.col2.quad.m128_f32[2];
-
-			return ans;
-		}
-
-		RE::NiPoint3& HK2NI_noscale(RE::NiPoint3& ans, RE::hkVector4 const& val)
-		{
-			ans = { val.quad.m128_f32[0], val.quad.m128_f32[1], val.quad.m128_f32[2] };
-			return ans;
-		}
-
-		RE::NiPoint3 HK2NI_noscale(RE::hkVector4 const& val)
-		{
-			return { val.quad.m128_f32[0], val.quad.m128_f32[1], val.quad.m128_f32[2] };
-		}
-
-		RE::hkVector4& NI2HK(RE::hkVector4& ans, const RE::NiPoint3& val)
-		{
-			float mul = RE::bhkWorld::GetWorldScale();
-			ans.quad.m128_f32[0] = val.x * mul;
-			ans.quad.m128_f32[1] = val.y * mul;
-			ans.quad.m128_f32[2] = val.z * mul;
-			ans.quad.m128_f32[3] = 0;
-
-			return ans;
-		}
-
-		RE::hkVector4& NI2HK_noscale(RE::hkVector4& ans, const RE::NiPoint3& val)
-		{
-			ans.quad.m128_f32[0] = val.x;
-			ans.quad.m128_f32[1] = val.y;
-			ans.quad.m128_f32[2] = val.z;
-			ans.quad.m128_f32[3] = 0;
-
-			return ans;
-		}
-
 		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, uint32_t filter_info)
 		{
-			auto havokWorldScale = RE::bhkWorld::GetWorldScale();
+			auto havokWorldScale = RE::GetWorldScale();
 			RE::bhkPickData pick_data;
 			pick_data.rayInput.from = from * havokWorldScale;
 			pick_data.rayInput.to = to * havokWorldScale;
@@ -150,8 +81,6 @@ namespace FenixUtils
 				return raycast(from, to, static_cast<uint32_t>(RE::COL_LAYER::kCharController));
 			}
 		}
-
-		float NiASin(float alpha) { return _generic_foo_<17744, decltype(NiASin)>::eval(alpha); }
 
 		float GetUnclampedZAngleFromVector(const RE::NiPoint3& V)
 		{

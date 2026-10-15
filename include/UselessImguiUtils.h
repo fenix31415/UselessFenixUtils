@@ -396,21 +396,21 @@ namespace ImguiUtils
 			case RE::BSKeyboardDevice::Key::kEscape:
 				return ImGuiKey_Escape;
 			case RE::BSKeyboardDevice::Key::kLeftControl:
-				return ImGuiKey_ModCtrl;
+				return ImGuiMod_Ctrl;
 			case RE::BSKeyboardDevice::Key::kLeftShift:
-				return ImGuiKey_ModShift;
+				return ImGuiMod_Shift;
 			case RE::BSKeyboardDevice::Key::kLeftAlt:
-				return ImGuiKey_ModAlt;
+				return ImGuiMod_Alt;
 			case RE::BSKeyboardDevice::Key::kLeftWin:
-				return ImGuiKey_ModSuper;
+				return ImGuiMod_Super;
 			case RE::BSKeyboardDevice::Key::kRightControl:
-				return ImGuiKey_ModCtrl;
+				return ImGuiMod_Ctrl;
 			case RE::BSKeyboardDevice::Key::kRightShift:
-				return ImGuiKey_ModShift;
+				return ImGuiMod_Shift;
 			case RE::BSKeyboardDevice::Key::kRightAlt:
-				return ImGuiKey_ModAlt;
+				return ImGuiMod_Alt;
 			case RE::BSKeyboardDevice::Key::kRightWin:
-				return ImGuiKey_ModSuper;
+				return ImGuiMod_Super;
 			// Skip 535
 			case RE::BSKeyboardDevice::Key::kNum0:
 				return ImGuiKey_0;
@@ -646,7 +646,6 @@ namespace ImguiUtils
 		{
 			auto& io = ImGui::GetIO();
 			if (uMsg == WM_KILLFOCUS) {
-				io.ClearInputCharacters();
 				io.ClearInputKeys();
 			}
 

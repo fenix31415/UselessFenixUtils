@@ -70,15 +70,6 @@ namespace FenixUtils
 		// Axis: y -- forward, x -- right, z angle = 0 => y = 1, x = 0.
 		// Angles: x:-pi/2 (up)..pi/2 (down), y:0, z:0 (along y)..2pi
 
-		RE::NiPoint3 HK2NI(RE::hkVector4 const& val);
-		RE::NiTransform HK2NI(RE::hkTransform const& val);
-		RE::NiMatrix3 HK2NI(RE::hkMatrix3 const& val);
-		RE::NiPoint3& HK2NI_noscale(RE::NiPoint3& ans, RE::hkVector4 const& val);
-		RE::NiPoint3 HK2NI_noscale(RE::hkVector4 const& val);
-		RE::hkVector4& NI2HK(RE::hkVector4& ans, const RE::NiPoint3& val);
-		RE::hkVector4& NI2HK_noscale(RE::hkVector4& ans, const RE::NiPoint3& val);
-
-		float NiASin(float alpha);
 		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, uint32_t filter_info);
 		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, bool ignore_player = true);
 
