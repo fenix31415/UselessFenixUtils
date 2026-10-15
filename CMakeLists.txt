@@ -240,8 +240,14 @@ install(
 	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )
 
+#configure_file(
+#	cmake/config.cmake.in
+#	"${PROJECT_NAME}Config.cmake"
+#	@ONLY
+#)
+
 configure_file(
-	cmake/config.cmake.in
+	cmake/UselessFenixUtils-config.cmake.in
 	"${PROJECT_NAME}Config.cmake"
 	@ONLY
 )
