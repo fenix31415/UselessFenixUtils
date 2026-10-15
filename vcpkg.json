@@ -8,46 +8,9 @@
     "boost-atomic",
     "boost-stl-interfaces",
     "glm",
-    "jsoncpp",
-    "magic-enum",
+		"jsoncpp",
+		"magic-enum",
     "spdlog",
     "xbyak"
-  ],
-  "features": {
-    "with-drawing": {
-      "description": "Build with drawing utilities",
-      "dependencies": []
-    },
-    "with-imgui": {
-      "description": "Build with ImGui utilities",
-      "dependencies": [
-        {
-          "name": "imgui",
-          "platform": "windows",
-          "features": ["dx11-binding", "win32-binding"],
-          "default-features": false
-        }
-      ]
-    },
-    "support-se": {
-      "description": "Build platform for Skyrim SE.",
-      "dependencies": [
-        {
-          "name": "commonlib",
-          "platform": "windows"
-        }
-      ]
-    },
-    "support-ae": {
-      "description": "Build platform for Skyrim AE.",
-      "dependencies": [
-        {
-          "name": "commonlib",
-          "platform": "windows",
-          "default-features": false,
-          "features": ["support-ae"]
-        }
-      ]
-    }
-  }
+  ]
 }
