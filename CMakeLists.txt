@@ -8,11 +8,15 @@ endmacro()
 
 set_from_environment(VCPKG_ROOT)
 
+if (NOT DEFINED VCPKG_ROOT AND DEFINED _VCPKG_ROOT_DIR)
+    set(VCPKG_ROOT "${_VCPKG_ROOT_DIR}")
+endif ()
+
 if (DEFINED VCPKG_ROOT)
 	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
 else ()
-	message(FATAL_ERROR	"Variable VCPKG_ROOT is not set")
+	message(FATAL_ERROR "Variable VCPKG_ROOT is not set")
 endif ()
 
 set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
