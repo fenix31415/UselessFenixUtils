@@ -201,3 +201,31 @@ target_precompile_headers(
 	PRIVATE
 		src/PCH.h
 )
+
+install(
+    TARGETS "${PROJECT_NAME}"
+    EXPORT "${PROJECT_NAME}-targets"
+)
+
+install(
+    EXPORT "${PROJECT_NAME}-targets"
+    NAMESPACE "${PROJECT_NAME}::"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+)
+
+configure_file(
+    cmake/UselessFenixUtils-config.cmake.in
+    "${PROJECT_NAME}Config.cmake"
+    @ONLY
+)
+
+install(
+    FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+)
+
+install(
+    DIRECTORY
+        "include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/UselessFenixUtils"
+)
