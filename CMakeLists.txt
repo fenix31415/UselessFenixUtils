@@ -88,9 +88,9 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
 
-#add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
+add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 
-find_package(CommonLibSSE REQUIRED CONFIG)
+#find_package(CommonLibSSE REQUIRED CONFIG)
 find_package(spdlog REQUIRED CONFIG)
 find_package(jsoncpp REQUIRED CONFIG)
 find_package(magic_enum CONFIG REQUIRED)
@@ -240,10 +240,10 @@ install(
 	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
 )
 
-install(
-	FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
-	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
-)
+#install(
+#	FILES "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}Config.cmake"
+#	DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}"
+#)
 
 #install(
 #	DIRECTORY
