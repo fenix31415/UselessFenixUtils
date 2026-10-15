@@ -1,3 +1,5 @@
+
+#ifdef USELESS_FENIX_UTILS_WITH_DRAWING
 #include <d3dcompiler.h>
 #include <timeapi.h>
 #pragma comment(lib, "winmm.lib")
@@ -2254,3 +2256,4 @@ PS_OUTPUT main(PS_INPUT input) {
 }
 
 #pragma warning(pop)
+#endif
