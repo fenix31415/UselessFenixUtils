@@ -55,7 +55,7 @@ namespace FenixUtils
 	{
 		RE::NiPoint3 raycast(const RE::NiPoint3& from, const RE::NiPoint3& to, uint32_t filter_info)
 		{
-			auto havokWorldScale = RE::bhkWorld::GetWorldScale();
+			auto havokWorldScale = RE::GetWorldScale();
 			RE::bhkPickData pick_data;
 			pick_data.rayInput.from = from * havokWorldScale;
 			pick_data.rayInput.to = to * havokWorldScale;
