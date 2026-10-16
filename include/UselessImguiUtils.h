@@ -685,6 +685,7 @@ namespace ImguiUtils
 				ContextGuard guard(drawImguiCtx);
 				Process(a_evns);
 			}
+
 			if (skipevents()) {
 			//if (skip1) {
 				_DispatchInputEvent(a_dispatcher, &dummy);
@@ -721,4 +722,4 @@ namespace ImguiUtils
 	};
 }
 
-#endif
+#endif  //  USELESS_FENIX_UTILS_WITH_IMGUI

@@ -1,28 +1,38 @@
 cmake_minimum_required(VERSION 3.20)
 
-macro(set_from_environment VARIABLE)
-	if (NOT DEFINED ${VARIABLE} AND DEFINED ENV{${VARIABLE}})
-		set(${VARIABLE} $ENV{${VARIABLE}})
-	endif ()
-endmacro()
+option(SKYRIM_SE "The only one true Skyrim SE (1.5) build" ON)
+option(WITH_IMGUI "Build with ImGui utilities" OFF)
+option(WITH_DRAWING "Build with drawing utilities" OFF)
 
-set_from_environment(VCPKG_ROOT)
+if(SKYRIM_SE)
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-se")
+else()
+  list(APPEND VCPKG_MANIFEST_FEATURES "support-ae")
+endif()
 
-if (NOT DEFINED VCPKG_ROOT AND DEFINED _VCPKG_ROOT_DIR)
-    set(VCPKG_ROOT "${_VCPKG_ROOT_DIR}")
-endif ()
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    if(NOT DEFINED ENV{VCPKG_ROOT} OR "$ENV{VCPKG_ROOT}" STREQUAL "")
+        message(FATAL_ERROR
+            "VCPKG_ROOT is not set; export it to the vcpkg clone "
+            "(scripts/buildsystems/vcpkg.cmake lives there)"
+        )
+    endif()
+    file(TO_CMAKE_PATH "$ENV{VCPKG_ROOT}" _vcpkg_root)
+    set(ENV{VCPKG_ROOT} "${_vcpkg_root}")
+    set(CMAKE_TOOLCHAIN_FILE "${_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+endif()
 
-if (DEFINED VCPKG_ROOT)
-	set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-	set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
-else ()
-	message(FATAL_ERROR "Variable VCPKG_ROOT is not set")
-endif ()
+if(NOT DEFINED VCPKG_TARGET_TRIPLET)
+    set(VCPKG_TARGET_TRIPLET "x64-windows-static-md" CACHE STRING "vcpkg target triplet")
+endif()
 
-set(Boost_USE_STATIC_RUNTIME OFF CACHE BOOL "")
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "")
+if(NOT VCPKG_OVERLAY_PORTS)
+  set(VCPKG_OVERLAY_PORTS "${CMAKE_SOURCE_DIR}/overlay_ports/" CACHE PATH "")
+endif()
 
-# ---- Project ----
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
 
 project(
 	UselessFenixUtils
@@ -44,35 +54,12 @@ configure_file(
 	@ONLY
 )
 
-# ---- Include guards ----
-
-if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-	message(
-		FATAL_ERROR
-			"In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there."
-	)
-endif()
-
 # ---- Globals ----
-
-if (MSVC)
-	add_compile_definitions(
-		_UNICODE
-	)
-
-	if (NOT ${CMAKE_GENERATOR} STREQUAL "Ninja")
-		add_compile_options(
-			/MP	# Build with Multiple Processes
-		)
-	endif ()
-endif ()
 
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
 
 set(Boost_USE_STATIC_LIBS ON)
-
-#add_subdirectory($ENV{CommonLibSSE} ./CommonLibSSE)
 
 find_package(CommonLibSSE CONFIG REQUIRED)
 find_package(spdlog REQUIRED CONFIG)
@@ -158,11 +145,23 @@ target_link_libraries(
 	PRIVATE
 		CommonLibSSE::CommonLibSSE
 		spdlog::spdlog
-    magic_enum::magic_enum
+		magic_enum::magic_enum
 		JsonCpp::JsonCpp
 )
 
+if (WITH_DRAWING)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_DRAWING=1)
+endif ()
+
+if (WITH_IMGUI)
+	find_package(imgui CONFIG REQUIRED)
+	target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC USELESS_FENIX_UTILS_WITH_IMGUI=1)
+endif ()
+
 if (MSVC)
+	target_compile_options(${PROJECT_NAME} PRIVATE "-DUNICODE" "-D_UNICODE")
+
 	target_compile_options(
 		${PROJECT_NAME}
 		PRIVATE
@@ -220,7 +219,41 @@ target_precompile_headers(
 		src/PCH.h
 )
 
+# Install the library and its export
+install(TARGETS ${PROJECT_NAME}
+    EXPORT ${PROJECT_NAME}-export
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/${PROJECT_NAME}
+)
+
+# Install header files
 install(
-    DIRECTORY include/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}"
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Package config for find_package
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/UselessFenixUtils-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
+
+# Install the config file
+install(
+    FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/UselessFenixUtils-config.cmake
+    DESTINATION
+        ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+)
+
+# Install the exported targets
+install(
+    EXPORT ${PROJECT_NAME}-export
+    NAMESPACE ${PROJECT_NAME}::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${PROJECT_NAME}
+    FILE UselessFenixUtils-targets.cmake
 )
